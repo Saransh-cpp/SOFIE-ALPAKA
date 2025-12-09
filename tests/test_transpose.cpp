@@ -25,7 +25,6 @@ int main() {
     }
 
     // ------------------ platform / device / queue ------------------
-    using DevAcc = alpaka::Dev<Acc>;
     auto plat = alpaka::Platform<Acc>{};
     auto dev = alpaka::getDevByIdx(plat, 0u);
     alpaka::Queue<Acc, alpaka::Blocking> queue{dev};
