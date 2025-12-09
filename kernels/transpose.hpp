@@ -27,7 +27,7 @@ struct TransposeKernel {
                 output_idx += out_coord * output_strides[d];
             }
             output[output_idx] = input[input_idx];
-        }  // end elements loop
+        }
     }
 };
 

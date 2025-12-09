@@ -69,8 +69,7 @@ int main() {
 
     const std::size_t ndim = 2;
 
-    // Because we're using the CPU backend, we can pass pointers to host arrays
-    // directly.
+    // can pass pointers to host arrays directly on CPU backend
     std::size_t const* input_strides_ptr = input_strides.data();
     std::size_t const* output_strides_ptr = output_strides.data();
     std::size_t const* perm_ptr = perm.data();
@@ -78,10 +77,7 @@ int main() {
     std::size_t const* input_shape_ptr = input_shape.data();
 
     // ------------------ work division ------------------
-    // We'll choose a 1D mapping of threads to elements
-    const std::size_t threadsPerBlock = 64;  // small for CPU example
-    const std::size_t numBlocks = (numElems + threadsPerBlock - 1) / threadsPerBlock;
-
+    // A 2D mapping of threads to elements
     using DimT = alpaka::DimInt<2>;
     const std::size_t threadsX = 16, threadsY = 16;
     const std::size_t blocksX = (cols + threadsX - 1) / threadsX;

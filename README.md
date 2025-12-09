@@ -1,6 +1,6 @@
 # SOFIE-ALPAKA
 
-[Alpaka](https://alpaka.readthedocs.io/en/stable/) (An Abstraction Library for Parallel Kernel Acceleration) kernels for [SOFIE](https://github.com/ML4EP/SOFIE) (System for Optimised Fast Inference code Emit).
+Kernels for heterogeneous architectures written in [Alpaka](https://alpaka.readthedocs.io/en/stable/) (An Abstraction Library for Parallel Kernel Acceleration) for [SOFIE](https://github.com/ML4EP/SOFIE) (System for Optimised Fast Inference code Emit).
 
 This repository does not depend on SOFIE, but these kernels will eventually go into SOFIE.
 
