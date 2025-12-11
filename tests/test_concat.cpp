@@ -48,23 +48,21 @@ int main() {
         for (auto& val : vec) val = distrib_real(gen);
     }
 
-    // ------------------ platform / device / queue ------------------
-    auto plat = alpaka::Platform<Acc>{};
-    auto dev = alpaka::getDevByIdx(plat, 0u);
-    alpaka::Queue<Acc, alpaka::Blocking> queue{dev};
+    // Setup the accelerator, host and queue
+    auto devAcc = alpaka::getDevByIdx(PlatAcc{}, 0u);
+    auto devHost = alpaka::getDevByIdx(PlatHost{}, 0u);
+    alpaka::Queue<Acc, alpaka::Blocking> queue{devAcc};
 
     // --- compute output shape: concat on axis 0 -> output_shape[0] = sum of
     // input sizes along axis 0
-    std::vector<std::size_t> axis_sizes(num_inputs);
-    for (std::size_t k = 0; k < num_inputs; ++k) axis_sizes[k] = in0;
     std::vector<std::size_t> axis_offsets(num_inputs);
     std::size_t acc = 0;
     for (std::size_t k = 0; k < num_inputs; ++k) {
         axis_offsets[k] = acc;
-        acc += axis_sizes[k];
+        acc += in_rows[k];
     }
-    const std::size_t out0 = acc;  // total along axis 0
-    const std::size_t out1 = in1;  // axis 1 stays same
+    const std::size_t out0 = acc;   // total along axis 0
+    const std::size_t out1 = cols;  // axis 1 stays same
     std::vector<std::size_t> output_shape = {out0, out1};
 
     // strides (row-major C-order)
