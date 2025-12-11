@@ -30,19 +30,18 @@ int main() {
     // Input matrix dimensions
     const std::size_t num_inputs = 3;
     const std::size_t cols = distrib_int(gen);
-    const std::size_t rows0 = distrib_int(gen);
-    const std::size_t rows1 = distrib_int(gen);
-    const std::size_t rows2 = distrib_int(gen);
 
-    std::cout << "Inputs are of shape\n";
-    std::cout << rows0 << "x" << cols << "\n";
-    std::cout << rows1 << "x" << cols << "\n";
-    std::cout << rows2 << "x" << cols << "\n";
+    std::vector<std::size_t> in_rows(num_inputs);
+    for (auto& val : in_rows) val = distrib_int(gen);
+
+    std::cout << "Number of inputs: " << num_inputs << "\n";
+    std::cout << "Inputs are of shape: ";
+    for (std::size_t k = 0; k < num_inputs; ++k)
+        std::cout << in_rows[k] << "x" << cols
+                  << ((k < num_inputs - 1) ? ", " : "\n");
 
     std::vector<std::vector<T>> INPUT(num_inputs);
-    INPUT.push_back(std::vector<T>(rows0 * cols));
-    INPUT.push_back(std::vector<T>(rows1 * cols));
-    INPUT.push_back(std::vector<T>(rows2 * cols));
+    for (auto& val : in_rows) INPUT.push_back(std::vector<T>(val * cols));
 
     for (auto& vec : INPUT) {
         for (auto& val : vec) val = distrib_real(gen);
