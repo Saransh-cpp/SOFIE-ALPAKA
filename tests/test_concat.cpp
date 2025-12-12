@@ -115,7 +115,6 @@ int main() {
         axis_sizes[k] = in_rows[k];
     }
 
-    auto output_shape = alpaka::Vec<Dim, Idx>(out_rows, out_cols);
     auto output_strides = alpaka::Vec<Dim, Idx>(out_cols, 1);
 
     // Work division: 2D mapping of threads to elements
@@ -132,7 +131,7 @@ int main() {
 
     alpaka::exec<Acc>(queue, workDiv, kernel, aIn_ptrs,
                       alpaka::getPtrNative(aOut), input_strides_vec, axis_sizes,
-                      concat_axis, output_strides, output_shape);
+                      concat_axis, output_strides, extent_out);
 
     alpaka::wait(queue);
 
