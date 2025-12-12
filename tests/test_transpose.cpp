@@ -24,7 +24,7 @@ int main() {
     // Random engine
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> distrib_int(100, 1000);
+    std::uniform_int_distribution<int> distrib_int(50, 500);
     std::uniform_real_distribution<float> distrib_real(-1.0f, 1.0f);
 
     // Input matrix dimensions

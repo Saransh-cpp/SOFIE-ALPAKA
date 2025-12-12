@@ -27,7 +27,7 @@ int main() {
     // Random engine
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> distrib_int(100, 1000);
+    std::uniform_int_distribution<int> distrib_int(50, 500);
     std::uniform_real_distribution<float> distrib_real(-1.0f, 1.0f);
 
     // Input matrix dimensions
@@ -132,7 +132,7 @@ int main() {
 
     alpaka::exec<Acc>(queue, workDiv, kernel, aIn_ptrs,
                       alpaka::getPtrNative(aOut), input_strides_vec, axis_sizes,
-                      num_inputs, concat_axis, output_strides, output_shape);
+                      concat_axis, output_strides, output_shape);
 
     alpaka::wait(queue);
 

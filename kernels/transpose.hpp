@@ -15,7 +15,7 @@ struct TransposeKernel {
                                   alpaka::Vec<Dim, Idx> perm) const {
         using DimAcc = alpaka::Dim<TAcc>;
         static_assert(DimAcc::value == Dim::value,
-                      "Accelerator and Data dimensions must match!");
+                      "Accelerator and data dimensions must match!");
 
         constexpr std::size_t D = Dim::value;
         auto elements = alpaka::uniformElementsND(acc, output_shape);
@@ -24,12 +24,11 @@ struct TransposeKernel {
             Idx input_idx = 0;
             Idx output_idx = 0;
 
+            // Compute input and output indexes
             for (std::size_t d = 0; d < D; ++d) {
                 Idx const out_coord = idx[d];
                 output_idx += out_coord * output_strides[d];
-
-                Idx const in_axis = perm[d];
-                input_idx += out_coord * input_strides[in_axis];
+                input_idx += out_coord * input_strides[perm[d]];
             }
 
             output[output_idx] = input[input_idx];
