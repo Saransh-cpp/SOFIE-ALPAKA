@@ -6,38 +6,39 @@
 namespace alpaka_kernels {
 
 struct WhereKernel {
-    template <typename Acc, typename T, typename TCond, typename Dim,
+    template <typename TAcc, typename T, typename TCond, typename Dim,
               typename Idx>
-    ALPAKA_FN_ACC void operator()(Acc const& acc, TCond const* condition,
+    ALPAKA_FN_ACC void operator()(TAcc const& acc, TCond const* condition,
                                   T const* x, T const* y, T* output,
-                                  alpaka::Vec<Dim, Idx> extent,
+                                  alpaka::Vec<Dim, Idx> output_shape,
                                   alpaka::Vec<Dim, Idx> cond_strides,
                                   alpaka::Vec<Dim, Idx> x_strides,
                                   alpaka::Vec<Dim, Idx> y_strides,
                                   alpaka::Vec<Dim, Idx> out_strides) const {
-        // Get the number of dimensions
-        constexpr std::size_t D = Dim::value;
+        using DimAcc = alpaka::Dim<TAcc>;
+        static_assert(DimAcc::value == Dim::value,
+                      "Accelerator and data dims must match");
 
-        // Iterate over every element in the N-D grid
-        auto elements = alpaka::uniformElementsND(acc, extent);
+        constexpr std::size_t D = Dim::value;
+        auto elements = alpaka::uniformElementsND(acc, output_shape);
 
         for (auto const& idx : elements) {
-            // Compute Linear Indices for all buffers
-            Idx idx_cond = 0;
-            Idx idx_x = 0;
-            Idx idx_y = 0;
-            Idx idx_out = 0;
+            // Compute input and output indexes
+            Idx cond_idx = 0;
+            Idx x_idx = 0;
+            Idx y_idx = 0;
+            Idx output_idx = 0;
 
             for (std::size_t d = 0; d < D; ++d) {
-                Idx const coord = idx[d];
+                Idx const out_coord = idx[d];
 
-                idx_cond += coord * cond_strides[d];
-                idx_x += coord * x_strides[d];
-                idx_y += coord * y_strides[d];
-                idx_out += coord * out_strides[d];
+                cond_idx += out_coord * cond_strides[d];
+                x_idx += out_coord * x_strides[d];
+                y_idx += out_coord * y_strides[d];
+                output_idx += out_coord * out_strides[d];
             }
 
-            output[idx_out] = condition[idx_cond] ? x[idx_x] : y[idx_y];
+            output[output_idx] = condition[cond_idx] ? x[x_idx] : y[y_idx];
         }
     }
 };
