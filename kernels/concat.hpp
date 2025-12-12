@@ -12,9 +12,9 @@ struct ConcatKernel {
     ALPAKA_FN_ACC void operator()(
         TAcc const& acc, std::array<T const*, N> input_ptrs, T* output,
         std::array<alpaka::Vec<Dim, Idx>, N> input_strides_vec,
-        std::array<Idx, N> axis_sizes, std::size_t concat_axis,
         alpaka::Vec<Dim, Idx> output_strides,
-        alpaka::Vec<Dim, Idx> output_shape) const {
+        alpaka::Vec<Dim, Idx> output_shape, std::array<Idx, N> axis_sizes,
+        std::size_t concat_axis) const {
         using DimAcc = alpaka::Dim<TAcc>;
         static_assert(DimAcc::value == Dim::value,
                       "Accelerator and data dims must match");
