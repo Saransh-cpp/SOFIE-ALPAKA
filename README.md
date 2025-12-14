@@ -8,13 +8,33 @@ Submission for CS-433: Machine Learning; hopefully, will not stay just as a rand
 
 ## Usage
 
-To run kernel tests for a particular kernel (say `TransposeKernel`):
+To build all kernels in `bin/`:
 
 ```
-g++ ./tests/test_transpose.cpp \
--I/path/to/alpaka/headers/ \
--DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED \
--std=c++17
+make all ALPAKA_DIR=/path/to/alpaka/headers CPLUS_INCLUDE_PATH=/path/to/any/other/headers ALPAKA_ACCELERATOR_FLAG=enable_an_alpaka_accelerator
 ```
 
-where `-DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED` enables the CPU threaded backend (change if required).
+where:
+- `ALPAKA_ACCELERATOR_FLAG` defaults to `ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED` (enables the CPU threaded backend)
+- `ALPAKA_DIR` defaults to `$(CURDIR)/../alpaka/include`
+- `CPLUS_INCLUDE_PATH` defaults to `/opt/homebrew/include` for macOS
+
+To build (in `bin/`) and run all kernel tests:
+
+```
+make test ALPAKA_DIR=/path/to/alpaka/headers CPLUS_INCLUDE_PATH=/path/to/any/other/headers ALPAKA_ACCELERATOR_FLAG=enable_an_alpaka_accelerator
+```
+
+To clean the outputs:
+
+```
+make clean
+```
+
+To run SOFIE integration tests:
+
+```
+cd tests/sofie_integration
+cmake -S. -Bbuild
+cmake --build build
+```
