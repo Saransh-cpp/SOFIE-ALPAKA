@@ -1,10 +1,15 @@
-cmake_minimum_required(VERSION 3.21)
-project(AlpakaTest LANGUAGES CXX CUDA)
+cmake_minimum_required(VERSION 3.25.2)
+project(SOFIEIntegrationTests LANGUAGES CXX CUDA)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CUDA_STANDARD 20)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # --- User-configurable options ---
 set(CUDA_BASE "/usr/local/cuda-13.1" CACHE PATH "CUDA base path")
 set(TBB_BASE "/usr" CACHE PATH "TBB base path")
-set(ALPAKA_BASE "../../../alpaka" CACHE PATH "Alpaka base path")
+set(ALPAKA_BASE "../../external/alpaka" CACHE PATH "Alpaka base path")
 
 find_package(ROOT COMPONENTS)
 # Add ROOT compile options

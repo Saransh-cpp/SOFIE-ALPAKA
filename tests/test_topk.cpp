@@ -14,11 +14,23 @@ constexpr std::size_t MaxRegisters = 64;
 using Dim = alpaka::DimInt<NumDims>;
 using Idx = std::size_t;
 
-// Define the accelerator
+#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+using DevAcc = alpaka::DevCudaRt;
+using QueueAcc = alpaka::Queue<DevAcc, alpaka::NonBlocking>;
+using Acc = alpaka::AccGpuCudaRt<Dim, Idx>;
+
+#elif defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+using DevAcc = alpaka::DevCpu;
+using QueueAcc = alpaka::Queue<DevAcc, alpaka::Blocking>;
 using Acc = alpaka::AccCpuThreads<Dim, Idx>;
 
-// Define the platform types
-using PlatAcc = alpaka::Platform<Acc>;
+#else
+#error Please define a single one of ALPAKA_ACC_GPU_CUDA_ENABLED, ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
+
+#endif
+
+using DevHost = alpaka::DevCpu;
+using PlatAcc = alpaka::Platform<DevAcc>;
 using PlatHost = alpaka::PlatformCpu;
 
 int main() {

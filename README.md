@@ -20,27 +20,39 @@ Clone the repository with all the submodules (dependencies):
 git clone https://github.com/Saransh-cpp/SOFIE-ALPAKA --recursive
 ```
 
-### Building kernels and tests
+### Building kernels and tests on a threaded CPU
 
-To build all kernels in `bin/`:
+To build all kernels and tests in `bin/`:
 
 ```
-make all ALPAKA_ACCELERATOR_FLAG=enable_an_alpaka_accelerator
+make all
 ```
 
-where `ALPAKA_ACCELERATOR_FLAG` defaults to `ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED` (enables the CPU threaded backend).
-
-### Running tests
+### Running tests on a threaded CPU
 
 To run all kernel tests (and build if not built before):
 
 ```
-make test ALPAKA_ACCELERATOR_FLAG=enable_an_alpaka_accelerator
+make test
 ```
 
-where `ALPAKA_ACCELERATOR_FLAG` defaults to `ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED` (enables the CPU threaded backend).
+### Building kernels and tests on an NVIDIA GPU
 
-### Running integration tests
+To build all the kernels and tests in `build/`
+
+```
+cmake -S. -Bbuild
+cmake --build build
+```
+
+where the following flags can be configured by the user:
+- `CUDA_BASE` (default: "/usr/local/cuda-13.1"): CUDA base path
+- `TBB_BASE` (default: "/usr"): TBB base path
+- `ALPAKA_BASE` (default: "external/alpaka"): Alpaka base path
+- `CUDA_ARCH` (default: "sm_75"): CUDA architecture
+- `CMAKE_CUDA_COMPILER` (default: "/usr/local/cuda-13.1/bin/nvcc"): Cuda compiler path
+
+### Running integration tests on an NVIDIA GPU
 
 To run SOFIE integration tests:
 
@@ -49,3 +61,5 @@ cd tests/sofie_integration
 cmake -S. -Bbuild
 cmake --build build
 ```
+
+with the same configurable flags listed in the section above.
