@@ -6,26 +6,27 @@
 namespace alpaka_kernels {
 
 struct TransposeKernel {
-    template <typename TAcc, typename T>
-    ALPAKA_FN_ACC void operator()(TAcc const& acc, T const* input, T* output, const std::size_t* input_strides,
-                                  const std::size_t* output_strides, const std::size_t* input_shape,
-                                  const std::size_t* output_shape, const std::size_t* perm,
-                                  const std::size_t ndim) const {
+    template <typename TAcc, typename T, typename Dim, typename Idx>
+    ALPAKA_FN_ACC void operator()(TAcc const& acc, T const* input, T* output, alpaka::Vec<Dim, Idx> input_strides,
+                                  alpaka::Vec<Dim, Idx> output_strides, alpaka::Vec<Dim, Idx> output_shape,
+                                  alpaka::Vec<Dim, Idx> perm) const {
         using DimAcc = alpaka::Dim<TAcc>;
-        using IdxAcc = alpaka::Idx<TAcc>;
-        constexpr std::size_t D = static_cast<std::size_t>(DimAcc::value);
-        alpaka::Vec<DimAcc, IdxAcc> shapeVec{};
-        for (std::size_t d = 0; d < D; ++d) shapeVec[d] = output_shape[d];
-        auto elements = alpaka::uniformElementsND(acc, shapeVec);
+        static_assert(DimAcc::value == Dim::value, "Accelerator and data dimensions must match!");
+
+        constexpr std::size_t D = Dim::value;
+        auto elements = alpaka::uniformElementsND(acc, output_shape);
+
         for (auto const& idx : elements) {
-            std::size_t input_idx = 0;
-            std::size_t output_idx = 0;
+            Idx input_idx = 0;
+            Idx output_idx = 0;
+
+            // Compute input and output indexes
             for (std::size_t d = 0; d < D; ++d) {
-                std::size_t out_coord = idx[d];
-                std::size_t in_axis = perm[d];
-                input_idx += out_coord * input_strides[in_axis];
+                Idx const out_coord = idx[d];
                 output_idx += out_coord * output_strides[d];
+                input_idx += out_coord * input_strides[perm[d]];
             }
+
             output[output_idx] = input[input_idx];
         }
     }

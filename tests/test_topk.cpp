@@ -1,12 +1,16 @@
 #include <alpaka/alpaka.hpp>
+#include <array>
 #include <iostream>
 #include <random>
 #include <vector>
 
-#include "../kernels/transpose.hpp"
+#include "../kernels/topk.hpp"
 
 // Test domain parameters
 constexpr std::size_t NumDims = 2;
+constexpr std::size_t TopkAxis = 1;
+constexpr std::size_t K = 4;
+constexpr std::size_t MaxRegisters = 64;
 using Dim = alpaka::DimInt<NumDims>;
 using Idx = std::size_t;
 
@@ -44,16 +48,13 @@ int main() {
 
     // Allocate buffers
     auto extentIn = alpaka::Vec<Dim, Idx>(rows, cols);
-    auto extentOut = alpaka::Vec<Dim, Idx>(cols, rows);
+    auto extentOut = alpaka::Vec<Dim, Idx>(rows, K);
 
     // 1) Accelerator buffers
     auto aIn = alpaka::allocBuf<T, Idx>(devAcc, extentIn);
     auto aOut = alpaka::allocBuf<T, Idx>(devAcc, extentOut);
 
     // 2) Host buffers
-    // Note that host and accelerator may coincide when using CPU backend,
-    // still it's better to allocate buffers separately for portability and
-    // because this ensures memory is pinned and not paged
     auto hIn = alpaka::allocBuf<T, Idx>(devHost, extentIn);
     auto hOut = alpaka::allocBuf<T, Idx>(devHost, extentOut);
 
@@ -69,26 +70,35 @@ int main() {
     alpaka::wait(queue);
 
     // Prepare kernel arguments
+    T const padding_value = -1.0;
     auto input_strides = alpaka::Vec<Dim, Idx>(cols, 1);
-    auto output_strides = alpaka::Vec<Dim, Idx>(rows, 1);
-
-    // output axis i corresponds to input axis perm[i]
-    // For transpose out[j,i] = in[i,j], so perm = {1,0}
-    auto perm = alpaka::Vec<Dim, Idx>(1, 0);
+    auto output_strides = alpaka::Vec<Dim, Idx>(K, 1);
 
     // Work division: 2D mapping of threads to elements
-    const std::size_t threadsX = 16, threadsY = 16;
-    const std::size_t blocksX = (cols + threadsX - 1) / threadsX;
-    const std::size_t blocksY = (rows + threadsY - 1) / threadsY;
+    auto grid_elements = extentOut;
+    grid_elements[TopkAxis] = 1;
 
-    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{alpaka::Vec<Dim, Idx>(blocksX, blocksY),
-                                                          alpaka::Vec<Dim, Idx>(threadsX, threadsY), extentOut};
+    alpaka::Vec<Dim, Idx> threadsPerBlock;
+    alpaka::Vec<Dim, Idx> blocksPerGrid;
+    Idx const TARGET_BLOCK_SIZE = 16;
+
+    for (std::size_t d = 0; d < Dim::value; ++d) {
+        if (d == TopkAxis) {
+            threadsPerBlock[d] = 1;
+            blocksPerGrid[d] = 1;
+        } else {
+            threadsPerBlock[d] = TARGET_BLOCK_SIZE;
+            blocksPerGrid[d] = (grid_elements[d] + threadsPerBlock[d] - 1) / threadsPerBlock[d];
+        }
+    }
+
+    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{blocksPerGrid, threadsPerBlock, grid_elements};
 
     // Launch kernel
-    TransposeKernel kernel;
+    TopKKernel<K, MaxRegisters> kernel;
 
     alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn), alpaka::getPtrNative(aOut), input_strides,
-                      output_strides, extentOut, perm);
+                      output_strides, grid_elements, TopkAxis, extentIn[TopkAxis], padding_value);
 
     alpaka::wait(queue);
 
@@ -97,14 +107,38 @@ int main() {
     alpaka::wait(queue);
 
     // Print result
-    std::cout << "Output is of shape " << cols << "x" << rows << "\n";
+    std::cout << "Output is of shape " << rows << "x" << K << "\n";
 
     {
         T* pHost = alpaka::getPtrNative(hOut);
-        for (std::size_t i = 0; i < cols; ++i) {
-            for (std::size_t j = 0; j < rows; ++j) {
-                T valOut = pHost[i * rows + j];
-                T valIn = INPUT[j * cols + i];
+        for (std::size_t i = 0; i < rows; ++i) {
+            std::array<T, K> top_vals = {padding_value};
+            std::size_t count = 0;
+
+            for (std::size_t j = 0; j < extentIn[TopkAxis]; ++j) {
+                T const val = INPUT[i * cols + j];
+                if (count == K && val <= top_vals[K - 1]) continue;
+
+                Idx insert_pos = 0;
+                while (insert_pos < count) {
+                    if (val > top_vals[insert_pos]) break;
+                    insert_pos++;
+                }
+
+                if (insert_pos < K) {
+                    std::size_t const last = std::min(count, K - 1);
+                    for (std::size_t s = last; s > insert_pos; --s) {
+                        top_vals[s] = top_vals[s - 1];
+                    }
+
+                    top_vals[insert_pos] = val;
+                    if (count < K) count++;
+                }
+            }
+
+            for (std::size_t j = 0; j < K; ++j) {
+                T const valOut = pHost[i * K + j];
+                T const valIn = top_vals[j];
 
                 if (valIn != valOut) {
                     std::cerr << "Failed!\n";
