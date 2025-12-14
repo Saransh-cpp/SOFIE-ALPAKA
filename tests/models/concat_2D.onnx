@@ -1,0 +1,23 @@
+concat-model:°
+-
+input1
+input2output"Concat*
+axis ConcatGraphZ$
+input1
+
+N
+C
+H
+WZ$
+input2
+
+N
+C
+H
+Wb&
+output
+
+N
+C
+2*H
+WB

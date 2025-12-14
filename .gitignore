@@ -2,3 +2,5 @@
 .venv/
 .env/
 .bin/
+.DS_Store
+build/
