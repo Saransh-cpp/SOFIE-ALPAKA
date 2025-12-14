@@ -10,7 +10,6 @@ Submission for CS-433: Machine Learning; hopefully, will not stay just as a rand
 
 - `Alpaka` (`v2.1.0`): for heterogenous kernels; present as a git submodule in `external/`
 
-
 ## Usage
 
 Clone the repository with all the submodules (dependencies):
