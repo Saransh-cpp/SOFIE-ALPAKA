@@ -78,15 +78,14 @@ int main() {
 
     // 2) host -> accelerator
     {
+#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         T* pAIn = alpaka::getPtrNative(aIn);
         T* pHIn = alpaka::getPtrNative(hIn);
-
-#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         // For GPU, use cudaMemcpy directly
         cudaMemcpy(pAIn, pHIn, numElems * sizeof(T), cudaMemcpyHostToDevice);
 #else
         // For CPU, use memcpy
-        std::memcpy(pAIn, pHIn, numElems * sizeof(T));
+        alpaka::memcpy(queue, aIn, hIn);
 #endif
     }
 
@@ -114,19 +113,18 @@ int main() {
 
     alpaka::wait(queue);
 
-    // Copy device -> host using 1D memcpy
+    // Final data transfer: accelerator -> host
     {
+#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         T* pAOut = alpaka::getPtrNative(aOut);
         T* pHOut = alpaka::getPtrNative(hOut);
-
-#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         cudaMemcpy(pHOut, pAOut, numElems * sizeof(T), cudaMemcpyDeviceToHost);
 #else
-        std::memcpy(pHOut, pAOut, numElems * sizeof(T));
+        alpaka::memcpy(queue, hOut, aOut);
 #endif
     }
 
-    // Check results
+    // Print results
     std::cout << "Output is of shape " << cols << "x" << rows << "\n";
 
     {

@@ -79,15 +79,14 @@ int main() {
 
     // 2) host -> accelerator
     {
-        T* pAIn = alpaka::getPtrNative(aIn);
-        T* pHIn = alpaka::getPtrNative(hIn);
-
 #if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         // For GPU, use cudaMemcpy directly
+        T* pAIn = alpaka::getPtrNative(aIn);
+        T* pHIn = alpaka::getPtrNative(hIn);
         cudaMemcpy(pAIn, pHIn, numElems * sizeof(T), cudaMemcpyHostToDevice);
 #else
         // For CPU, use memcpy
-        std::memcpy(pAIn, pHIn, numElems * sizeof(T));
+        alpaka::memcpy(queue, aIn, hIn);
 #endif
     }
 
@@ -126,13 +125,12 @@ int main() {
 
     // Final data transfer: accelerator -> host
     {
+#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         T* pAOut = alpaka::getPtrNative(aOut);
         T* pHOut = alpaka::getPtrNative(hOut);
-
-#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         cudaMemcpy(pHOut, pAOut, numElems * sizeof(T), cudaMemcpyDeviceToHost);
 #else
-        std::memcpy(pHOut, pAOut, numElems * sizeof(T));
+        alpaka::memcpy(queue, hOut, aOut);
 #endif
     }
 
