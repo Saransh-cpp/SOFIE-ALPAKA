@@ -67,9 +67,8 @@ def run_benchmark(executable_path, args):
             return float(kernel_match.group(1)), float(total_match.group(1))
         else:
             print(f"Output parsing failed for size {N}x{N}.")
-            print("--- Raw Output ---")
+            print("Printing raw output from the cpp executable")
             print(output)
-            print("------------------\n")
             return None
         
     except subprocess.CalledProcessError as e:
@@ -82,12 +81,12 @@ def main():
         sys.exit(1)
 
     print("Bandwidth calculated based on kernel execution time only,")
-    print("if the result is 0 you're probably using the CPU itself as the accelerator")
+    print("if the result is 0 you're probably using the CPU itself as the accelerator\n")
 
     # Benchmark Phase
     for EXECUTABLE_PATH in EXECUTABLE_PATHS:
         print(f"Benchmarking {EXECUTABLE_PATH}")
-        print(f"{'SIZE (NxN)':<12} | {'KERNEL (ms)':<12} | {'TOTAL (ms)':<12} | {'BANDWIDTH (GB/s)*':<18}")
+        print(f"{'SIZE (NxN)':<12} | {'KERNEL (ms)':<12} | {'TOTAL (ms)':<12} | {'BANDWIDTH (GB/s)':<18}")
         print("-" * 65)
 
         for N in BENCHMARK_SIZES:
@@ -121,7 +120,7 @@ def main():
 
                 print(f"{N:<12} | {k_ms:<12.4f} | {t_ms:<12.4f} | {bandwidth_gbs:<18.2f}")
 
-        print("-" * 65)
+        print("-" * 65, "\n")
 
 if __name__ == "__main__":
     main()

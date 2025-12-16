@@ -1,4 +1,5 @@
 #include <alpaka/alpaka.hpp>
+#include <chrono>
 #include <iostream>
 #include <random>
 #include <vector>
@@ -29,7 +30,9 @@ using DevHost = alpaka::DevCpu;
 using PlatAcc = alpaka::Platform<DevAcc>;
 using PlatHost = alpaka::PlatformCpu;
 
-int main() {
+auto now() { return std::chrono::high_resolution_clock::now(); }
+
+int main(int argc, char* argv[]) {
     using namespace alpaka_kernels;
     using T = float;
     using TCond = bool;
@@ -42,18 +45,27 @@ int main() {
     std::bernoulli_distribution distrib_bool(0.5);
 
     // Input matrix dimensions
-    const std::size_t rows = distrib_int(gen);
-    const std::size_t cols = distrib_int(gen);
-    const std::size_t numElems = rows * cols;
+    std::size_t rows = distrib_int(gen);
+    std::size_t cols = distrib_int(gen);
 
-    std::cout << "Inputs are of shape " << rows << "x" << cols << "\n";
+    if (argc >= 2) {
+        rows = std::atoi(argv[1]);
+        cols = rows;
+        std::cout << "Using input dimensions " << rows << "x" << cols << "\n";
+    }
+    else {
+        std::cout << "Using random dimensions " << rows << "x" << cols << "\n";
+    }
+
+    const std::size_t numElems = rows * cols;
 
     std::vector<T> INPUT_X(numElems), INPUT_Y(numElems);
     std::vector<TCond> INPUT_COND(numElems);
 
     for (auto& val : INPUT_X) val = distrib_real(gen) * 100.0;
     for (auto& val : INPUT_Y) val = distrib_real(gen);
-    for (std::size_t i = 0; i < numElems; ++i) INPUT_COND[i] = distrib_bool(gen);
+    for (std::size_t i = 0; i < numElems; ++i)
+        INPUT_COND[i] = distrib_bool(gen);
 
     // Setup the accelerator, host and queue
     auto devAcc = alpaka::getDevByIdx(PlatAcc{}, 0u);
@@ -75,6 +87,18 @@ int main() {
     auto hIn_Cond = alpaka::allocBuf<T, Idx>(devHost, extent);
     auto hOut = alpaka::allocBuf<T, Idx>(devHost, extent);
 
+    // Prepare kernel arguments
+    auto strides = alpaka::Vec<Dim, Idx>(cols, 1);
+
+    // Work division: 2D mapping of threads to elements
+    const std::size_t threadsX = 16, threadsY = 16;
+    const std::size_t blocksX = (cols + threadsX - 1) / threadsX;
+    const std::size_t blocksY = (rows + threadsY - 1) / threadsY;
+
+    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{
+        alpaka::Vec<Dim, Idx>(blocksX, blocksY),
+        alpaka::Vec<Dim, Idx>(threadsX, threadsY), extent};
+
     // Initial data transfer
     // 1) INPUT -> host buffer (safe via raw pointer)
     {
@@ -89,34 +113,29 @@ int main() {
     }
 
     // 2) host -> accelerator
+    auto start_total = now();
     alpaka::memcpy(queue, aIn_X, hIn_X);
     alpaka::memcpy(queue, aIn_Y, hIn_Y);
     alpaka::memcpy(queue, aIn_Cond, hIn_Cond);
     alpaka::wait(queue);
 
-    // Prepare kernel arguments
-    auto strides = alpaka::Vec<Dim, Idx>(cols, 1);
-
-    // Work division: 2D mapping of threads to elements
-    const std::size_t threadsX = 16, threadsY = 16;
-    const std::size_t blocksX = (cols + threadsX - 1) / threadsX;
-    const std::size_t blocksY = (rows + threadsY - 1) / threadsY;
-
-    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{alpaka::Vec<Dim, Idx>(blocksX, blocksY),
-                                                          alpaka::Vec<Dim, Idx>(threadsX, threadsY), extent};
-
     // Launch kernel
     WhereKernel kernel;
 
-    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn_Cond), alpaka::getPtrNative(aIn_X),
-                      alpaka::getPtrNative(aIn_Y), alpaka::getPtrNative(aOut), strides, strides, strides, strides,
-                      extent);
+    auto start_kernel = now();
+
+    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn_Cond),
+                      alpaka::getPtrNative(aIn_X), alpaka::getPtrNative(aIn_Y),
+                      alpaka::getPtrNative(aOut), strides, strides, strides,
+                      strides, extent);
 
     alpaka::wait(queue);
+    auto end_kernel = now();
 
     // Final data transfer: accelerator -> host
     alpaka::memcpy(queue, hOut, aOut);
     alpaka::wait(queue);
+    auto end_total = now();
 
     // Print result
     std::cout << "Output is of shape " << rows << "x" << cols << "\n";
@@ -126,7 +145,8 @@ int main() {
         for (std::size_t i = 0; i < rows; ++i) {
             for (std::size_t j = 0; j < cols; ++j) {
                 T valOut = pHost[i * cols + j];
-                T valIn = INPUT_COND[i * cols + j] ? INPUT_X[i * cols + j] : INPUT_Y[i * cols + j];
+                T valIn = INPUT_COND[i * cols + j] ? INPUT_X[i * cols + j]
+                                                   : INPUT_Y[i * cols + j];
 
                 if (valIn != valOut) {
                     std::cerr << "Failed!\n";
@@ -137,5 +157,13 @@ int main() {
     }
 
     std::cout << "Correct!\n";
+
+    std::chrono::duration<double, std::milli> kernel_ms =
+        end_kernel - start_kernel;
+    std::chrono::duration<double, std::milli> total_ms =
+        end_total - start_total;
+
+    std::cout << "TIME_KERNEL_MS: " << kernel_ms.count() << std::endl;
+    std::cout << "TIME_TOTAL_MS: " << total_ms.count() << std::endl;
     return 0;
 }

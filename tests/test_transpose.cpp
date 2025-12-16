@@ -74,9 +74,6 @@ int main(int argc, char* argv[]) {
     auto aOut = alpaka::allocBuf<T, Idx>(devAcc, extentOut);
 
     // 2) Host buffers
-    // Note that host and accelerator may coincide when using CPU backend,
-    // still it's better to allocate buffers separately for portability and
-    // because this ensures memory is pinned and not paged
     auto hIn = alpaka::allocBuf<T, Idx>(devHost, extentIn);
     auto hOut = alpaka::allocBuf<T, Idx>(devHost, extentOut);
 
@@ -104,9 +101,8 @@ int main(int argc, char* argv[]) {
         for (Idx i = 0; i < numElems; ++i) pHost[i] = INPUT[i];
     }
 
-    auto start_total = now();
-
     // 2) host -> accelerator
+    auto start_total = now();
     alpaka::memcpy(queue, aIn, hIn);
     alpaka::wait(queue);
 
