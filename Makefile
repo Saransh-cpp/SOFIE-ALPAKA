@@ -1,10 +1,12 @@
 CXX      := g++
 CXXFLAGS ?= -std=c++17 -O2 -Wall
 
-KERNEL_DIR ?= kernels
-TEST_DIR   ?= tests
-ALPAKA_DIR ?= $(CURDIR)/include
-BIN_DIR    ?= bin
+KERNEL_DIR          	 ?= kernels
+TEST_DIR            	 ?= tests
+ALPAKA_DIR          	 ?= $(CURDIR)/external/alpaka/include
+CPLUS_INCLUDE_PATH       ?= /opt/homebrew/include
+BIN_DIR                  ?= bin
+ALPAKA_ACCELERATOR_FLAG  ?= ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
 
 KERNEL_HEADERS := $(wildcard $(KERNEL_DIR)/*.hpp)
 KERNEL_NAMES := $(patsubst $(KERNEL_DIR)/%.hpp,%,$(KERNEL_HEADERS))
@@ -24,7 +26,7 @@ test: $(EXECUTABLES)
 
 $(BIN_DIR)/test_%.out: $(TEST_DIR)/test_%.cpp $(KERNEL_DIR)/%.hpp | $(BIN_DIR)
 	@echo "Building test for kernel: $*"
-	$(CXX) $(CXXFLAGS) -I$(ALPAKA_DIR) -DALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED $< -o $@
+	$(CXX) $(CXXFLAGS) -I$(ALPAKA_DIR) -I$(CPLUS_INCLUDE_PATH) -D$(ALPAKA_ACCELERATOR_FLAG) $< -o $@
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)

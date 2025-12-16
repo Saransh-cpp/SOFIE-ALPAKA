@@ -13,11 +13,23 @@ constexpr std::size_t ConcatAxis = 0;
 using Dim = alpaka::DimInt<NumDims>;
 using Idx = std::size_t;
 
-// Define the accelerator
+#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+using DevAcc = alpaka::DevCudaRt;
+using QueueAcc = alpaka::Queue<DevAcc, alpaka::NonBlocking>;
+using Acc = alpaka::AccGpuCudaRt<Dim, Idx>;
+
+#elif defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+using DevAcc = alpaka::DevCpu;
+using QueueAcc = alpaka::Queue<DevAcc, alpaka::Blocking>;
 using Acc = alpaka::AccCpuThreads<Dim, Idx>;
 
-// Define the platform types
-using PlatAcc = alpaka::Platform<Acc>;
+#else
+#error Please define a single one of ALPAKA_ACC_GPU_CUDA_ENABLED, ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
+
+#endif
+
+using DevHost = alpaka::DevCpu;
+using PlatAcc = alpaka::Platform<DevAcc>;
 using PlatHost = alpaka::PlatformCpu;
 
 int main() {
@@ -43,8 +55,7 @@ int main() {
     std::cout << "Number of inputs: " << NumInputs << "\n";
     std::cout << "Inputs are of shape: ";
     for (std::size_t k = 0; k < NumInputs; ++k)
-        std::cout << in_rows[k] << "x" << cols
-                  << ((k < NumInputs - 1) ? ", " : "\n");
+        std::cout << in_rows[k] << "x" << cols << ((k < NumInputs - 1) ? ", " : "\n");
 
     std::array<std::vector<T>, NumInputs> INPUT;
     for (std::size_t k = 0; k < NumInputs; ++k) {
@@ -58,10 +69,8 @@ int main() {
     alpaka::Queue<Acc, alpaka::Blocking> queue{devAcc};
 
     // Allocate buffers & initial data transfer
-    using BufAcc =
-        decltype(alpaka::allocBuf<T, Idx>(devAcc, alpaka::Vec<Dim, Idx>{}));
-    using BufHost =
-        decltype(alpaka::allocBuf<T, Idx>(devHost, alpaka::Vec<Dim, Idx>{}));
+    using BufAcc = decltype(alpaka::allocBuf<T, Idx>(devAcc, alpaka::Vec<Dim, Idx>{}));
+    using BufHost = decltype(alpaka::allocBuf<T, Idx>(devHost, alpaka::Vec<Dim, Idx>{}));
 
     std::vector<BufAcc> aIn_bufs;
     aIn_bufs.reserve(NumInputs);
@@ -86,8 +95,7 @@ int main() {
         // Initial data transfer
         // 1) INPUT -> host buffer (safe via raw pointers)
         T* pHost = alpaka::getPtrNative(hIn_bufs.back());
-        for (std::size_t i = 0; i < INPUT[k].size(); ++i)
-            pHost[i] = INPUT[k][i];
+        for (std::size_t i = 0; i < INPUT[k].size(); ++i) pHost[i] = INPUT[k][i];
 
         // 2) host -> accelerator
         alpaka::memcpy(queue, aIn_bufs.back(), hIn_bufs.back());
@@ -122,16 +130,14 @@ int main() {
     const std::size_t blocksX = (out_rows + threadsX - 1) / threadsX;
     const std::size_t blocksY = (out_cols + threadsY - 1) / threadsY;
 
-    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{
-        alpaka::Vec<Dim, Idx>(blocksX, blocksY),
-        alpaka::Vec<Dim, Idx>(threadsX, threadsY), extentOut};
+    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{alpaka::Vec<Dim, Idx>(blocksX, blocksY),
+                                                          alpaka::Vec<Dim, Idx>(threadsX, threadsY), extentOut};
 
     // Launch kernel
     ConcatKernel kernel;
 
-    alpaka::exec<Acc>(queue, workDiv, kernel, aIn_ptrs,
-                      alpaka::getPtrNative(aOut), input_strides_vec,
-                      output_strides, extentOut, axis_sizes, ConcatAxis);
+    alpaka::exec<Acc>(queue, workDiv, kernel, aIn_ptrs, alpaka::getPtrNative(aOut), input_strides_vec, output_strides,
+                      extentOut, axis_sizes, ConcatAxis);
 
     alpaka::wait(queue);
 
@@ -143,8 +149,7 @@ int main() {
     std::cout << "Output is of shape " << out_rows << "x" << out_cols << "\n";
 
     std::vector<T> expected;
-    for (const auto& vec : INPUT)
-        expected.insert(expected.end(), vec.begin(), vec.end());
+    for (const auto& vec : INPUT) expected.insert(expected.end(), vec.begin(), vec.end());
 
     {
         T* pHost = alpaka::getPtrNative(hOut);

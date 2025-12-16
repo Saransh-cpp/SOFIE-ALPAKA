@@ -10,11 +10,23 @@ constexpr std::size_t NumDims = 2;
 using Dim = alpaka::DimInt<NumDims>;
 using Idx = std::size_t;
 
-// Define the accelerator
+#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+using DevAcc = alpaka::DevCudaRt;
+using QueueAcc = alpaka::Queue<DevAcc, alpaka::NonBlocking>;
+using Acc = alpaka::AccGpuCudaRt<Dim, Idx>;
+
+#elif defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+using DevAcc = alpaka::DevCpu;
+using QueueAcc = alpaka::Queue<DevAcc, alpaka::Blocking>;
 using Acc = alpaka::AccCpuThreads<Dim, Idx>;
 
-// Define the platform types
-using PlatAcc = alpaka::Platform<Acc>;
+#else
+#error Please define a single one of ALPAKA_ACC_GPU_CUDA_ENABLED, ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
+
+#endif
+
+using DevHost = alpaka::DevCpu;
+using PlatAcc = alpaka::Platform<DevAcc>;
 using PlatHost = alpaka::PlatformCpu;
 
 int main() {
@@ -81,16 +93,14 @@ int main() {
     const std::size_t blocksX = (cols + threadsX - 1) / threadsX;
     const std::size_t blocksY = (rows + threadsY - 1) / threadsY;
 
-    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{
-        alpaka::Vec<Dim, Idx>(blocksX, blocksY),
-        alpaka::Vec<Dim, Idx>(threadsX, threadsY), extentOut};
+    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{alpaka::Vec<Dim, Idx>(blocksX, blocksY),
+                                                          alpaka::Vec<Dim, Idx>(threadsX, threadsY), extentOut};
 
     // Launch kernel
     TransposeKernel kernel;
 
-    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn),
-                      alpaka::getPtrNative(aOut), input_strides, output_strides,
-                      extentOut, perm);
+    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn), alpaka::getPtrNative(aOut), input_strides,
+                      output_strides, extentOut, perm);
 
     alpaka::wait(queue);
 

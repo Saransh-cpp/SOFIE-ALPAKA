@@ -7,17 +7,13 @@
 namespace alpaka_kernels {
 
 struct ConcatKernel {
-    template <typename TAcc, typename T, typename Dim, typename Idx,
-              std::size_t N>
-    ALPAKA_FN_ACC void operator()(
-        TAcc const& acc, std::array<T const*, N> input_ptrs, T* output,
-        std::array<alpaka::Vec<Dim, Idx>, N> input_strides_vec,
-        alpaka::Vec<Dim, Idx> output_strides,
-        alpaka::Vec<Dim, Idx> output_shape, std::array<Idx, N> axis_sizes,
-        std::size_t concat_axis) const {
+    template <typename TAcc, typename T, typename Dim, typename Idx, std::size_t N>
+    ALPAKA_FN_ACC void operator()(TAcc const& acc, std::array<T const*, N> input_ptrs, T* output,
+                                  std::array<alpaka::Vec<Dim, Idx>, N> input_strides_vec,
+                                  alpaka::Vec<Dim, Idx> output_strides, alpaka::Vec<Dim, Idx> output_shape,
+                                  std::array<Idx, N> axis_sizes, std::size_t concat_axis) const {
         using DimAcc = alpaka::Dim<TAcc>;
-        static_assert(DimAcc::value == Dim::value,
-                      "Accelerator and data dims must match");
+        static_assert(DimAcc::value == Dim::value, "Accelerator and data dims must match");
 
         constexpr std::size_t D = Dim::value;
         auto elements = alpaka::uniformElementsND(acc, output_shape);

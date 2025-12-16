@@ -6,18 +6,13 @@
 namespace alpaka_kernels {
 
 struct WhereKernel {
-    template <typename TAcc, typename T, typename TCond, typename Dim,
-              typename Idx>
-    ALPAKA_FN_ACC void operator()(TAcc const& acc, TCond const* condition,
-                                  T const* x, T const* y, T* output,
-                                  alpaka::Vec<Dim, Idx> cond_strides,
-                                  alpaka::Vec<Dim, Idx> x_strides,
-                                  alpaka::Vec<Dim, Idx> y_strides,
-                                  alpaka::Vec<Dim, Idx> out_strides,
+    template <typename TAcc, typename T, typename TCond, typename Dim, typename Idx>
+    ALPAKA_FN_ACC void operator()(TAcc const& acc, TCond const* condition, T const* x, T const* y, T* output,
+                                  alpaka::Vec<Dim, Idx> cond_strides, alpaka::Vec<Dim, Idx> x_strides,
+                                  alpaka::Vec<Dim, Idx> y_strides, alpaka::Vec<Dim, Idx> out_strides,
                                   alpaka::Vec<Dim, Idx> output_shape) const {
         using DimAcc = alpaka::Dim<TAcc>;
-        static_assert(DimAcc::value == Dim::value,
-                      "Accelerator and data dims must match");
+        static_assert(DimAcc::value == Dim::value, "Accelerator and data dims must match");
 
         constexpr std::size_t D = Dim::value;
         auto elements = alpaka::uniformElementsND(acc, output_shape);
