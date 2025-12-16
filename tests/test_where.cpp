@@ -91,13 +91,13 @@ int main() {
     // 2) host -> accelerator
     {
 #if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+        // For GPU, use cudaMemcpy directly
         T* pAIn_X = alpaka::getPtrNative(aIn_X);
         T* pAIn_Y = alpaka::getPtrNative(aIn_Y);
         T* pAIn_Cond = alpaka::getPtrNative(aIn_Cond);
         T* pHIn_X = alpaka::getPtrNative(hIn_X);
         T* pHIn_Y = alpaka::getPtrNative(hIn_Y);
         T* pHIn_Cond = alpaka::getPtrNative(hIn_Cond);
-        // For GPU, use cudaMemcpy directly
         cudaMemcpy(pAIn_X, pHIn_X, numElems * sizeof(T), cudaMemcpyHostToDevice);
         cudaMemcpy(pAIn_Y, pHIn_Y, numElems * sizeof(T), cudaMemcpyHostToDevice);
         cudaMemcpy(pAIn_Cond, pHIn_Cond, numElems * sizeof(T), cudaMemcpyHostToDevice);
