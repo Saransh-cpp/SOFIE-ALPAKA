@@ -165,8 +165,8 @@ def run_cpp_benchmark(executable_path, args):
 
 def main():
     # Build System
-    print(f"\n{'Build System':^80}")
-    print("-" * 80)
+    print(f"\n{'Build System':^100}")
+    print("-" * 100)
     if not build_kernel_tests():
         sys.exit(1)
 
@@ -175,9 +175,9 @@ def main():
     if HAS_TORCH and torch.cuda.is_available():
         device_name = f"GPU ({torch.cuda.get_device_name(0)})"
 
-    print(f"\n{'Benchmarking System':^80}")
-    print(f"{f'PyTorch Device: {device_name}':^80}")
-    print("-" * 80)
+    print(f"\n{'Benchmarking System':^100}")
+    print(f"{f'PyTorch Device: {device_name}':^100}")
+    print("-" * 100)
 
     for EXECUTABLE_PATH in EXECUTABLE_PATHS:
         op_name = get_op_name(EXECUTABLE_PATH)
