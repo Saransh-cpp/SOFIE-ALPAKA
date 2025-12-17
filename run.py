@@ -2,13 +2,21 @@ import subprocess
 import sys
 import os
 import re
+import time
+
+try:
+    import torch
+    HAS_TORCH = True
+except:
+    HAS_TORCH = False
+    print("PyTorch not found, running only C++.\n")
 
 # Configuration
 EXECUTABLE_PATHS = [
     "./bin/test_trivial.out",
     "./bin/test_concat.out",
-    "./bin/test_transpose.out",
     "./bin/test_topk.out",
+    "./bin/test_transpose.out",
     "./bin/test_where.out"
 ]
 
@@ -45,7 +53,86 @@ def build_kernel_tests():
         print("Error: 'make' command not found. Is it installed?")
         return False
 
-def run_benchmark(executable_path, args):
+def get_op_name(executable_path):
+    if "trivial" in executable_path: return "trivial"
+    if "transpose" in executable_path: return "transpose"
+    if "concat" in executable_path: return "concat"
+    if "where" in executable_path: return "where"
+    if "topk" in executable_path: return "topk"
+    return "unknown"
+
+def run_pytorch_benchmark(op_name, N, num_repeats=1, warmup=0):
+    """
+    Runs the equivalent operation in PyTorch and measures execution time.
+    Compatible with both CPU and GPU.
+    """
+    if not HAS_TORCH:
+        return None
+
+    # Detect device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Setup Data
+    if op_name == "trivial":
+        x = torch.randn(N, N, device=device, dtype=torch.float32)
+        op = lambda: x.clone()
+
+    elif op_name == "transpose":
+        x = torch.randn(N, N, device=device, dtype=torch.float32)
+        op = lambda: x.t().contiguous()
+
+    elif op_name == "concat":
+        t1 = torch.randn(N, N, device=device, dtype=torch.float32)
+        t2 = torch.randn(N, N, device=device, dtype=torch.float32)
+        t3 = torch.randn(N, N, device=device, dtype=torch.float32)
+        op = lambda: torch.cat((t1, t2, t3), dim=1)
+
+    elif op_name == "where":
+        cond = torch.randint(0, 2, (N, N), device=device, dtype=torch.bool)
+        x = torch.randn(N, N, device=device, dtype=torch.float32)
+        y = torch.randn(N, N, device=device, dtype=torch.float32)
+        op = lambda: torch.where(cond, x, y)
+
+    elif op_name == "topk":
+        k = 4
+        x = torch.randn(N, N, device=device, dtype=torch.float32)
+        op = lambda: torch.topk(x, k)
+    else:
+        return None
+
+    '''
+    # Warmup
+    for _ in range(warmup):
+        op()
+    '''
+
+    if device.type == 'cuda':
+        torch.cuda.synchronize()
+
+    #  Benchmarking
+    if device.type == 'cuda':
+        # GPU Timing (Asynchronous)
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+
+        start_event.record()
+        for _ in range(num_repeats):
+            op()
+        end_event.record()
+        torch.cuda.synchronize()
+        total_ms = start_event.elapsed_time(end_event)
+
+    else:
+        # CPU Timing (Synchronous)
+        start_time = time.perf_counter()
+        for _ in range(num_repeats):
+            op()
+        end_time = time.perf_counter()
+        total_ms = (end_time - start_time) * 1000.0 # convert seconds to ms
+
+    return total_ms / num_repeats
+
+def run_cpp_benchmark(executable_path, args):
     """
     Runs the compiled executable with arguments.
     """
@@ -79,49 +166,80 @@ def run_benchmark(executable_path, args):
         print("Stderr:", e.stderr)
 
 def main():
-    # Build Phase
+    # Build System
+    print(f"\n{'Build System':^80}")
+    print("-" * 80)
     if not build_kernel_tests():
         sys.exit(1)
 
-    print("Bandwidth calculated based on kernel execution time only")
+    # Benchmarking System
+    device_name = "CPU"
+    if HAS_TORCH and torch.cuda.is_available():
+        device_name = f"GPU ({torch.cuda.get_device_name(0)})"
 
-    # Benchmark Phase
+    print(f"\n{'Benchmarking System':^80}")
+    print(f"{f'PyTorch Device: {device_name}':^80}")
+    print("-" * 80)
+
     for EXECUTABLE_PATH in EXECUTABLE_PATHS:
-        print(f"Benchmarking {EXECUTABLE_PATH}")
-        print(f"{'SIZE (NxN)':<12} | {'KERNEL (ms)':<12} | {'TOTAL (ms)':<12} | {'BANDWIDTH (GB/s)':<18}")
-        print("-" * 65)
+        op_name = get_op_name(EXECUTABLE_PATH)
+        print(f"Operation: {op_name.upper()}")
+
+        # Flexible Headers
+        # K = Kernel Time, T = Total Time
+        if HAS_TORCH:
+            header = (f"{'SIZE':<6} | {'CPP(K)':<9} | {'CPP(T)':<9} | {'TORCH':<9} | "
+                      f"{'CPP GB/s':<9} | {'TORCH GB/s':<11} | {'SPEEDUP':<8}")
+        else:
+            header = (f"{'SIZE':<6} | {'CPP(K)':<10} | {'CPP(T)':<10} | {'CPP GB/s':<12}")
+
+        print(header)
+        print("-" * len(header))
 
         for N in BENCHMARK_SIZES:
-            res = run_benchmark(EXECUTABLE_PATH, [N])
-            if res:
-                k_ms, t_ms = res
+            # 1. Run C++ Benchmark
+            cpp_res = run_cpp_benchmark(EXECUTABLE_PATH, [N])
+            if cpp_res:
+                cpp_k_ms, cpp_t_ms = cpp_res
+            else:
+                cpp_k_ms, cpp_t_ms = None, None
 
-                # Bandwidth Calculation (approximate)
-                total_bytes = 0.0
+            # 2. Run PyTorch Benchmark
+            torch_ms = run_pytorch_benchmark(op_name, N) if HAS_TORCH else None
 
-                if EXECUTABLE_PATH == "./bin/test_trivial.out":
-                    total_bytes = 8 * N * N
-                if EXECUTABLE_PATH == "./bin/test_transpose.out":
-                    total_bytes = 8 * N * N
-                elif EXECUTABLE_PATH == "./bin/test_concat.out":
-                    concat_num = 3
-                    total_bytes = 8 * concat_num * N * N
-                elif EXECUTABLE_PATH == "./bin/test_where.out":
-                    total_bytes = 13 * N * N
-                elif EXECUTABLE_PATH == "./bin/test_topk.out":
-                    k = 4
-                    total_bytes = 4 * N * N + 4 * N * k
+            # 3. Calculate Bandwidth (Using Kernel Time)
+            total_bytes = 0.0
+            if op_name == "trivial": total_bytes = 8 * N * N
+            elif op_name == "transpose": total_bytes = 8 * N * N
+            elif op_name == "concat":  total_bytes = 24 * N * N
+            elif op_name == "where":   total_bytes = 13 * N * N
+            elif op_name == "topk":    total_bytes = 4 * N * N + 16 * N
 
-                # GB/s = (Bytes / 1e9) / (Seconds)
-                # Time is in ms, so divide by 1000.0
-                if k_ms > 0:
-                    bandwidth_gbs = (total_bytes / 1e9) / (k_ms / 1000.0)
-                else:
-                    bandwidth_gbs = 0.0
+            # GB/s = (Bytes/1e9) / (ms/1000)
+            cpp_bw = (total_bytes / 1e9) / (cpp_k_ms / 1000.0) if (cpp_k_ms and cpp_k_ms > 0) else 0.0
+            torch_bw = (total_bytes / 1e9) / (torch_ms / 1000.0) if (torch_ms and torch_ms > 0) else 0.0
 
-                print(f"{N:<12} | {k_ms:<12.4f} | {t_ms:<12.4f} | {bandwidth_gbs:<18.4f}")
+            # Formatting
+            c_k_str = f"{cpp_k_ms:.4f}" if cpp_k_ms else "ERR"
+            c_t_str = f"{cpp_t_ms:.4f}" if cpp_t_ms else "ERR"
+            c_bw_str = f"{cpp_bw:.2f}" if cpp_k_ms else "-"
 
-        print("-" * 65)
+            if HAS_TORCH:
+                t_ms_str = f"{torch_ms:.4f}" if torch_ms else "ERR"
+                t_bw_str = f"{torch_bw:.2f}" if torch_ms else "-"
+
+                # Compare PyTorch Time vs C++ Kernel Time
+                speedup_str = "-"
+                if cpp_k_ms and torch_ms and cpp_k_ms > 0:
+                    ratio = torch_ms / cpp_k_ms
+                    speedup_str = f"{ratio:.2f}x"
+
+                print(f"{N:<6} | {c_k_str:<9} | {c_t_str:<9} | {t_ms_str:<9} | "
+                      f"{c_bw_str:<9} | {t_bw_str:<11} | {speedup_str:<8}")
+            else:
+                print(f"{N:<6} | {c_k_str:<10} | {c_t_str:<10} | {c_bw_str:<12}")
+
+        print("-" * len(header))
 
         if EXECUTABLE_PATH != EXECUTABLE_PATHS[-1]:
             print("")
