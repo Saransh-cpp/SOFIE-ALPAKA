@@ -23,7 +23,23 @@ Clone the repository with all the submodules (dependencies):
 git clone https://github.com/Saransh-cpp/SOFIE-ALPAKA --recursive
 ```
 
-### Building kernels and tests on a threaded CPU
+### Building, testingm, and benchmarking kernels
+
+The repository contains a wrapper script to build, test, and benchmark all kernels on CPU, GPU, and against CPU/GPU enabled PyTorch.
+
+To run benchmarks on CPU:
+```
+python run.py
+```
+
+To run benchmarks on GPU:
+```
+python run.py --gpu
+```
+
+The script will automatically find PyTorch (and if it was compiled for CPU or GPU) and benchmark against it (or skip if PyTorch is not installed).
+
+### Building and running kernels and tests on a threaded CPU
 
 To build all kernels and tests in `bin/`:
 
@@ -31,15 +47,13 @@ To build all kernels and tests in `bin/`:
 make all -j10
 ```
 
-### Running tests on a threaded CPU
-
 To run all kernel tests (and build if not built before):
 
 ```
 make test -j10
 ```
 
-### Building kernels and tests on an NVIDIA GPU
+### Building and running kernels and tests on an NVIDIA GPU
 
 To build all the kernels and tests in `build/`
 
