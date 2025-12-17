@@ -75,28 +75,34 @@ def run_pytorch_benchmark(op_name, N, num_repeats=1, warmup=0):
     # Setup Data
     if op_name == "trivial":
         x = torch.randn(N, N, device=device, dtype=torch.float32)
-        op = lambda: x.clone()
+        y = torch.empty_like(x)
+        op = lambda: y.copy_(x)
 
     elif op_name == "transpose":
         x = torch.randn(N, N, device=device, dtype=torch.float32)
-        op = lambda: x.t().contiguous()
+        y = torch.empty(N, N, device=device, dtype=torch.float32)
+        op = lambda: y.copy_(x.t())
 
     elif op_name == "concat":
         t1 = torch.randn(N, N, device=device, dtype=torch.float32)
         t2 = torch.randn(N, N, device=device, dtype=torch.float32)
         t3 = torch.randn(N, N, device=device, dtype=torch.float32)
-        op = lambda: torch.cat((t1, t2, t3), dim=1)
+        out_tensor = torch.empty(N, 3*N, device=device, dtype=torch.float32)
+        op = lambda: torch.cat((t1, t2, t3), dim=1, out=out_tensor)
 
     elif op_name == "where":
         cond = torch.randint(0, 2, (N, N), device=device, dtype=torch.bool)
         x = torch.randn(N, N, device=device, dtype=torch.float32)
         y = torch.randn(N, N, device=device, dtype=torch.float32)
-        op = lambda: torch.where(cond, x, y)
+        out_tensor = torch.empty_like(x)
+        op = lambda: torch.where(cond, x, y, out=out_tensor)
 
     elif op_name == "topk":
         k = 4
         x = torch.randn(N, N, device=device, dtype=torch.float32)
-        op = lambda: torch.topk(x, k)
+        values = torch.empty(N, k, device=device, dtype=torch.float32)
+        indices = torch.empty(N, k, device=device, dtype=torch.long)
+        op = lambda: torch.topk(x, k, out=(values, indices))
     else:
         return None
 
