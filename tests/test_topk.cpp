@@ -173,7 +173,7 @@ int main(int argc, char* argv[]) {
 #elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         T* pAOut = alpaka::getPtrNative(aOut);
         T* pHOut = alpaka::getPtrNative(hOut);
-        cudaMemcpy(pHOut, pAOut, numElems * sizeof(T), cudaMemcpyDeviceToHost);
+        cudaMemcpy(pHOut, pAOut, rows * K * sizeof(T), cudaMemcpyDeviceToHost);
 #endif
     }
     auto end_total = now();

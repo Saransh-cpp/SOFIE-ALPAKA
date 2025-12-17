@@ -23,7 +23,7 @@ BENCHMARK_SIZES = [
     512,
     1024,
     2048,
-    4096
+    4096,
 ]
 
 def build_kernel_tests_cpu():

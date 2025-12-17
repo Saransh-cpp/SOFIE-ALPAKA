@@ -86,8 +86,6 @@ int main(int argc, char* argv[]) {
         for (auto& val : INPUT[k]) val = distrib_real(gen);
     }
 
-    const std::size_t numElems = total_rows * cols;
-
     // Setup the accelerator, host and queue
     auto devAcc = alpaka::getDevByIdx(PlatAcc{}, 0u);
     auto devHost = alpaka::getDevByIdx(PlatHost{}, 0u);
@@ -155,7 +153,7 @@ int main(int argc, char* argv[]) {
 #elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
 
     // Work division: 2D mapping of threads to elements
-    std::size_t threadsX = 4, threadsY = 4;
+    std::size_t threadsX = 16, threadsY = 16;
     std::size_t blocksX = (out_rows + threadsX - 1) / threadsX;
     std::size_t blocksY = (out_cols + threadsY - 1) / threadsY;
 
@@ -179,7 +177,8 @@ int main(int argc, char* argv[]) {
             // For GPU, use cudaMemcpy directly
             T* pAIn = alpaka::getPtrNative(aIn_bufs[k]);
             T* pHIn = alpaka::getPtrNative(hIn_bufs[k]);
-            cudaMemcpy(pAIn, pHIn, numElems * sizeof(T), cudaMemcpyHostToDevice);
+            std::size_t numElems_k = in_rows[k] * cols;  // ACTUAL size of this buffer
+            cudaMemcpy(pAIn, pHIn, numElems_k * sizeof(T), cudaMemcpyHostToDevice);
 #endif
         }
     }
@@ -203,6 +202,7 @@ int main(int argc, char* argv[]) {
 #elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         T* pAOut = alpaka::getPtrNative(aOut);
         T* pHOut = alpaka::getPtrNative(hOut);
+        const std::size_t numElems = total_rows * cols;
         cudaMemcpy(pHOut, pAOut, numElems * sizeof(T), cudaMemcpyDeviceToHost);
 #else
 #endif
