@@ -34,7 +34,7 @@ BENCHMARK_SIZES = [
     1024,
     2048,
     4096,
-    # 8192
+    8192
 ]
 
 def build_kernel_tests_cpu():
@@ -217,7 +217,8 @@ def main(gpu = False):
             device_name = f"GPU ({torch.cuda.get_device_name(0)})"
 
         print(f"\n{'Benchmarking System':^80}")
-        print(f"{f'PyTorch Device: {device_name}':^80}")
+        if HAS_TORCH:
+            print(f"{f'PyTorch Device: {device_name}':^80}")
         print("-" * 80)
 
         for EXECUTABLE_PATH in EXECUTABLE_PATHS_GPU:
@@ -227,10 +228,10 @@ def main(gpu = False):
             # Flexible Headers
             # K = Kernel Time, T = Total Time
             if HAS_TORCH:
-                header = (f"{'SIZE':<6} | {'CPP(K)':<9} | {'CPP(T)':<9} | {'TORCH':<9} | "
-                        f"{'CPP GB/s':<9} | {'TORCH GB/s':<11} | {'SPEEDUP':<8}")
+                header = (f"{'SIZE':<6} | {'CUDA(K)':<9} | {'CUDA(T)':<9} | {'TORCH':<9} | "
+                        f"{'CUDA GB/s':<9} | {'TORCH GB/s':<11} | {'SPEEDUP':<8}")
             else:
-                header = (f"{'SIZE':<6} | {'CPP(K)':<10} | {'CPP(T)':<10} | {'CPP GB/s':<12}")
+                header = (f"{'SIZE':<6} | {'CUDA(K)':<10} | {'CUDA(T)':<10} | {'CUDA GB/s':<12}")
 
             print(header)
             print("-" * len(header))
@@ -292,7 +293,8 @@ def main(gpu = False):
             device_name = f"GPU ({torch.cuda.get_device_name(0)})"
 
         print(f"\n{'Benchmarking System':^80}")
-        print(f"{f'PyTorch Device: {device_name}':^80}")
+        if HAS_TORCH:
+            print(f"{f'PyTorch Device: {device_name}':^80}")
         print("-" * 80)
 
         for EXECUTABLE_PATH in EXECUTABLE_PATHS_CPU:
@@ -302,10 +304,10 @@ def main(gpu = False):
             # Flexible Headers
             # K = Kernel Time, T = Total Time
             if HAS_TORCH:
-                header = (f"{'SIZE':<6} | {'CPP(K)':<9} | {'CPP(T)':<9} | {'TORCH':<9} | "
-                        f"{'CPP GB/s':<9} | {'TORCH GB/s':<11} | {'SPEEDUP':<8}")
+                header = (f"{'SIZE':<6} | {'CPU(K)':<9} | {'CPU(T)':<9} | {'TORCH':<9} | "
+                        f"{'CPU GB/s':<9} | {'TORCH GB/s':<11} | {'SPEEDUP':<8}")
             else:
-                header = (f"{'SIZE':<6} | {'CPP(K)':<10} | {'CPP(T)':<10} | {'CPP GB/s':<12}")
+                header = (f"{'SIZE':<6} | {'CPU(K)':<10} | {'CPU(T)':<10} | {'CPU GB/s':<12}")
 
             print(header)
             print("-" * len(header))
