@@ -1,4 +1,5 @@
 #include <alpaka/alpaka.hpp>
+#include <chrono>
 #include <iostream>
 #include <random>
 #include <vector>
@@ -15,6 +16,16 @@ using DevAcc = alpaka::DevCudaRt;
 using Acc = alpaka::AccGpuCudaRt<Dim, Idx>;
 using QueueAcc = alpaka::Queue<Acc, alpaka::NonBlocking>;
 
+#elif defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED)
+using DevAcc = alpaka::DevCpu;
+using QueueAcc = alpaka::Queue<DevAcc, alpaka::Blocking>;
+using Acc = alpaka::AccCpuTbbBlocks<Dim, Idx>;
+
+#elif defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED)
+using DevAcc = alpaka::DevCpu;
+using QueueAcc = alpaka::Queue<DevAcc, alpaka::Blocking>;
+using Acc = alpaka::AccCpuSerial<Dim, Idx>;
+
 #elif defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
 using DevAcc = alpaka::DevCpu;
 using Acc = alpaka::AccCpuThreads<Dim, Idx>;
@@ -29,7 +40,9 @@ using DevHost = alpaka::DevCpu;
 using PlatAcc = alpaka::Platform<DevAcc>;
 using PlatHost = alpaka::PlatformCpu;
 
-int main() {
+auto now() { return std::chrono::high_resolution_clock::now(); }
+
+int main(int argc, char* argv[]) {
     using namespace alpaka_kernels;
     using T = float;
     using TCond = bool;
@@ -42,11 +55,18 @@ int main() {
     std::bernoulli_distribution distrib_bool(0.5);
 
     // Input matrix dimensions
-    const std::size_t rows = distrib_int(gen);
-    const std::size_t cols = distrib_int(gen);
-    const std::size_t numElems = rows * cols;
+    std::size_t rows = distrib_int(gen);
+    std::size_t cols = distrib_int(gen);
 
-    std::cout << "Inputs are of shape " << rows << "x" << cols << "\n";
+    if (argc >= 2) {
+        rows = std::atoi(argv[1]);
+        cols = rows;
+        std::cout << "Using input dimensions " << rows << "x" << cols << "\n";
+    } else {
+        std::cout << "Using random dimensions " << rows << "x" << cols << "\n";
+    }
+
+    const std::size_t numElems = rows * cols;
 
     std::vector<T> INPUT_X(numElems), INPUT_Y(numElems);
     std::vector<TCond> INPUT_COND(numElems);
@@ -75,6 +95,26 @@ int main() {
     auto hIn_Cond = alpaka::allocBuf<T, Idx>(devHost, extent);
     auto hOut = alpaka::allocBuf<T, Idx>(devHost, extent);
 
+    // Prepare kernel arguments
+    auto strides = alpaka::Vec<Dim, Idx>(cols, 1);
+
+    // Work division: 2D mapping of threads to elements
+    std::size_t threadsX = 16, threadsY = 16;
+    std::size_t blocksX = (cols + threadsX - 1) / threadsX;
+    std::size_t blocksY = (rows + threadsY - 1) / threadsY;
+
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+
+    threadsX = 1;
+    threadsY = 1;
+    blocksX = 64;
+    blocksY = 1;
+#endif
+
+    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{alpaka::Vec<Dim, Idx>(blocksX, blocksY),
+                                                          alpaka::Vec<Dim, Idx>(threadsX, threadsY), extent};
+
     // Initial data transfer
     // 1) INPUT -> host buffer (safe via raw pointer)
     {
@@ -89,6 +129,7 @@ int main() {
     }
 
     // 2) host -> accelerator
+    auto start_total = now();
     {
 #if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         // For GPU, use cudaMemcpy directly
@@ -109,25 +150,17 @@ int main() {
 #endif
     }
 
-    // Prepare kernel arguments
-    auto strides = alpaka::Vec<Dim, Idx>(cols, 1);
-
-    // Work division: 2D mapping of threads to elements
-    const std::size_t threadsX = 16, threadsY = 16;
-    const std::size_t blocksX = (cols + threadsX - 1) / threadsX;
-    const std::size_t blocksY = (rows + threadsY - 1) / threadsY;
-
-    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{alpaka::Vec<Dim, Idx>(blocksX, blocksY),
-                                                          alpaka::Vec<Dim, Idx>(threadsX, threadsY), extent};
-
     // Launch kernel
     WhereKernel kernel;
+
+    auto start_kernel = now();
 
     alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn_Cond), alpaka::getPtrNative(aIn_X),
                       alpaka::getPtrNative(aIn_Y), alpaka::getPtrNative(aOut), strides, strides, strides, strides,
                       extent);
 
     alpaka::wait(queue);
+    auto end_kernel = now();
 
     // Final data transfer: accelerator -> host
     {
@@ -139,6 +172,7 @@ int main() {
         alpaka::memcpy(queue, hOut, aOut);
 #endif
     }
+    auto end_total = now();
 
     // Print result
     std::cout << "Output is of shape " << rows << "x" << cols << "\n";
@@ -159,5 +193,11 @@ int main() {
     }
 
     std::cout << "Correct!\n";
+
+    std::chrono::duration<double, std::milli> kernel_ms = end_kernel - start_kernel;
+    std::chrono::duration<double, std::milli> total_ms = end_total - start_total;
+
+    std::cout << "TIME_KERNEL_MS: " << kernel_ms.count() << std::endl;
+    std::cout << "TIME_TOTAL_MS: " << total_ms.count() << std::endl;
     return 0;
 }

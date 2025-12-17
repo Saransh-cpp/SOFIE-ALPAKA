@@ -1,5 +1,6 @@
 #include <alpaka/alpaka.hpp>
 #include <array>
+#include <chrono>
 #include <iostream>
 #include <random>
 #include <vector>
@@ -18,6 +19,16 @@ using DevAcc = alpaka::DevCudaRt;
 using Acc = alpaka::AccGpuCudaRt<Dim, Idx>;
 using QueueAcc = alpaka::Queue<Acc, alpaka::NonBlocking>;
 
+#elif defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED)
+using DevAcc = alpaka::DevCpu;
+using QueueAcc = alpaka::Queue<DevAcc, alpaka::Blocking>;
+using Acc = alpaka::AccCpuTbbBlocks<Dim, Idx>;
+
+#elif defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED)
+using DevAcc = alpaka::DevCpu;
+using QueueAcc = alpaka::Queue<DevAcc, alpaka::Blocking>;
+using Acc = alpaka::AccCpuSerial<Dim, Idx>;
+
 #elif defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
 using DevAcc = alpaka::DevCpu;
 using Acc = alpaka::AccCpuThreads<Dim, Idx>;
@@ -32,7 +43,9 @@ using DevHost = alpaka::DevCpu;
 using PlatAcc = alpaka::Platform<DevAcc>;
 using PlatHost = alpaka::PlatformCpu;
 
-int main() {
+auto now() { return std::chrono::high_resolution_clock::now(); }
+
+int main(int argc, char* argv[]) {
     using namespace alpaka_kernels;
     using T = float;
 
@@ -43,17 +56,27 @@ int main() {
     std::uniform_real_distribution<float> distrib_real(-1.0f, 1.0f);
 
     // Input matrix dimensions
-    const std::size_t cols = distrib_int(gen);
+    std::array<std::size_t, NumInputs> in_rows;
+    std::size_t cols = distrib_int(gen);
     std::size_t total_rows = 0;
 
-    std::array<std::size_t, NumInputs> in_rows;
-    for (auto& val : in_rows) {
-        val = distrib_int(gen);
-        total_rows += val;
+    std::cout << "Number of inputs: " << NumInputs << "\n";
+
+    if (argc >= 2) {
+        std::cout << "Using input dimensions ";
+        cols = std::atoi(argv[1]);
+        for (auto& val : in_rows) {
+            val = cols;
+            total_rows += val;
+        }
+    } else {
+        std::cout << "Using random dimensions ";
+        for (auto& val : in_rows) {
+            val = distrib_int(gen);
+            total_rows += val;
+        }
     }
 
-    std::cout << "Number of inputs: " << NumInputs << "\n";
-    std::cout << "Inputs are of shape: ";
     for (std::size_t k = 0; k < NumInputs; ++k)
         std::cout << in_rows[k] << "x" << cols << ((k < NumInputs - 1) ? ", " : "\n");
 
@@ -70,7 +93,7 @@ int main() {
     auto devHost = alpaka::getDevByIdx(PlatHost{}, 0u);
     QueueAcc queue{devAcc};
 
-    // Allocate buffers & initial data transfer
+    // Allocate buffers
     using BufAcc = decltype(alpaka::allocBuf<T, Idx>(devAcc, alpaka::Vec<Dim, Idx>{}));
     using BufHost = decltype(alpaka::allocBuf<T, Idx>(devHost, alpaka::Vec<Dim, Idx>{}));
 
@@ -94,23 +117,9 @@ int main() {
         // 2) Host input buffers
         hIn_bufs.push_back(alpaka::allocBuf<T, Idx>(devHost, extentIn));
 
-        // Initial data transfer
-        // 1) INPUT -> host buffer (safe via raw pointers)
+        // INPUT to host buffer data transfer (safe via raw pointers)
         T* pHost = alpaka::getPtrNative(hIn_bufs.back());
         for (std::size_t i = 0; i < INPUT[k].size(); ++i) pHost[i] = INPUT[k][i];
-
-        // 2) host -> accelerator
-        {
-#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
-            // For GPU, use cudaMemcpy directly
-            T* pAIn = alpaka::getPtrNative(aIn_bufs.back());
-            T* pHIn = alpaka::getPtrNative(hIn_bufs.back());
-            cudaMemcpy(pAIn, pHIn, numElems * sizeof(T), cudaMemcpyHostToDevice);
-#else
-            // For CPU, use memcpy
-            alpaka::memcpy(queue, aIn_bufs.back(), hIn_bufs.back());
-#endif
-        }
     }
 
     // Allocate output buffers
@@ -136,20 +145,50 @@ int main() {
     auto output_strides = alpaka::Vec<Dim, Idx>(out_cols, 1);
 
     // Work division: 2D mapping of threads to elements
-    const std::size_t threadsX = 16, threadsY = 16;
-    const std::size_t blocksX = (out_rows + threadsX - 1) / threadsX;
-    const std::size_t blocksY = (out_cols + threadsY - 1) / threadsY;
+    std::size_t threadsX = 16, threadsY = 16;
+    std::size_t blocksX = (out_rows + threadsX - 1) / threadsX;
+    std::size_t blocksY = (out_cols + threadsY - 1) / threadsY;
+
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+
+    threadsX = 1;
+    threadsY = 1;
+    blocksX = 64;
+    blocksY = 1;
+#endif
 
     auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{alpaka::Vec<Dim, Idx>(blocksY, blocksX),
                                                           alpaka::Vec<Dim, Idx>(threadsY, threadsX), extentOut};
 
+    // Host to accelerator data transfer
+    auto start_total = now();
+
+    for (std::size_t k = 0; k < NumInputs; ++k) {
+        // 2) host -> accelerator
+        {
+#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+            // For GPU, use cudaMemcpy directly
+            T* pAIn = alpaka::getPtrNative(aIn_bufs.back());
+            T* pHIn = alpaka::getPtrNative(hIn_bufs.back());
+            cudaMemcpy(pAIn, pHIn, numElems * sizeof(T), cudaMemcpyHostToDevice);
+#else
+            // For CPU, use memcpy
+            alpaka::memcpy(queue, aIn_bufs[k], hIn_bufs[k]);
+#endif
+        }
+    }
+
     // Launch kernel
     ConcatKernel kernel;
+
+    auto start_kernel = now();
 
     alpaka::exec<Acc>(queue, workDiv, kernel, aIn_ptrs, alpaka::getPtrNative(aOut), input_strides_vec, output_strides,
                       extentOut, axis_sizes, ConcatAxis);
 
     alpaka::wait(queue);
+    auto end_kernel = now();
 
     {
         // Final data transfer: accelerator -> host
@@ -161,6 +200,7 @@ int main() {
         alpaka::memcpy(queue, hOut, aOut);
 #endif
     }
+    auto end_total = now();
 
     // Print result
     std::cout << "Output is of shape " << out_rows << "x" << out_cols << "\n";
@@ -179,5 +219,11 @@ int main() {
     }
 
     std::cout << "Correct!\n";
+
+    std::chrono::duration<double, std::milli> kernel_ms = end_kernel - start_kernel;
+    std::chrono::duration<double, std::milli> total_ms = end_total - start_total;
+
+    std::cout << "TIME_KERNEL_MS: " << kernel_ms.count() << std::endl;
+    std::cout << "TIME_TOTAL_MS: " << total_ms.count() << std::endl;
     return 0;
 }
