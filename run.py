@@ -100,11 +100,9 @@ def run_pytorch_benchmark(op_name, N, num_repeats=1, warmup=0):
     else:
         return None
 
-    '''
     # Warmup
     for _ in range(warmup):
         op()
-    '''
 
     if device.type == 'cuda':
         torch.cuda.synchronize()
@@ -128,7 +126,7 @@ def run_pytorch_benchmark(op_name, N, num_repeats=1, warmup=0):
         for _ in range(num_repeats):
             op()
         end_time = time.perf_counter()
-        total_ms = (end_time - start_time) * 1000.0 # convert seconds to ms
+        total_ms = (end_time - start_time) * 1000.0
 
     return total_ms / num_repeats
 
