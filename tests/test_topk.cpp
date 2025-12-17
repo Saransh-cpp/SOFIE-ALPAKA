@@ -131,10 +131,8 @@ int main(int argc, char* argv[]) {
     // Warmup run
     TopKKernel<K, MaxRegisters> kernel;
 
-    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn),
-                      alpaka::getPtrNative(aOut), input_strides, output_strides,
-                      grid_elements, TopkAxis, extentIn[TopkAxis],
-                      padding_value);
+    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn), alpaka::getPtrNative(aOut), input_strides,
+                      output_strides, grid_elements, TopkAxis, extentIn[TopkAxis], padding_value);
 
     alpaka::wait(queue);
 

@@ -62,8 +62,7 @@ int main(int argc, char* argv[]) {
         rows = std::atoi(argv[1]);
         cols = rows;
         std::cout << "Using input dimensions " << rows << "x" << cols << "\n";
-    }
-    else {
+    } else {
         std::cout << "Using random dimensions " << rows << "x" << cols << "\n";
     }
 
@@ -74,8 +73,7 @@ int main(int argc, char* argv[]) {
 
     for (auto& val : INPUT_X) val = distrib_real(gen) * 100.0;
     for (auto& val : INPUT_Y) val = distrib_real(gen);
-    for (std::size_t i = 0; i < numElems; ++i)
-        INPUT_COND[i] = distrib_bool(gen);
+    for (std::size_t i = 0; i < numElems; ++i) INPUT_COND[i] = distrib_bool(gen);
 
     // Setup the accelerator, host and queue
     auto devAcc = alpaka::getDevByIdx(PlatAcc{}, 0u);
@@ -114,17 +112,15 @@ int main(int argc, char* argv[]) {
     blocksY = 1;
 #endif
 
-    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{
-        alpaka::Vec<Dim, Idx>(blocksX, blocksY),
-        alpaka::Vec<Dim, Idx>(threadsX, threadsY), extent};
+    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{alpaka::Vec<Dim, Idx>(blocksX, blocksY),
+                                                          alpaka::Vec<Dim, Idx>(threadsX, threadsY), extent};
 
     // Warmup run
     WhereKernel kernel;
 
-    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn_Cond),
-                      alpaka::getPtrNative(aIn_X), alpaka::getPtrNative(aIn_Y),
-                      alpaka::getPtrNative(aOut), strides, strides, strides,
-                      strides, extent);
+    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn_Cond), alpaka::getPtrNative(aIn_X),
+                      alpaka::getPtrNative(aIn_Y), alpaka::getPtrNative(aOut), strides, strides, strides, strides,
+                      extent);
 
     alpaka::wait(queue);
 
@@ -151,10 +147,9 @@ int main(int argc, char* argv[]) {
     // Launch kernel
     auto start_kernel = now();
 
-    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn_Cond),
-                      alpaka::getPtrNative(aIn_X), alpaka::getPtrNative(aIn_Y),
-                      alpaka::getPtrNative(aOut), strides, strides, strides,
-                      strides, extent);
+    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn_Cond), alpaka::getPtrNative(aIn_X),
+                      alpaka::getPtrNative(aIn_Y), alpaka::getPtrNative(aOut), strides, strides, strides, strides,
+                      extent);
 
     alpaka::wait(queue);
     auto end_kernel = now();
@@ -172,8 +167,7 @@ int main(int argc, char* argv[]) {
         for (std::size_t i = 0; i < rows; ++i) {
             for (std::size_t j = 0; j < cols; ++j) {
                 T valOut = pHost[i * cols + j];
-                T valIn = INPUT_COND[i * cols + j] ? INPUT_X[i * cols + j]
-                                                   : INPUT_Y[i * cols + j];
+                T valIn = INPUT_COND[i * cols + j] ? INPUT_X[i * cols + j] : INPUT_Y[i * cols + j];
 
                 if (valIn != valOut) {
                     std::cerr << "Failed!\n";
@@ -185,10 +179,8 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Correct!\n";
 
-    std::chrono::duration<double, std::milli> kernel_ms =
-        end_kernel - start_kernel;
-    std::chrono::duration<double, std::milli> total_ms =
-        end_total - start_total;
+    std::chrono::duration<double, std::milli> kernel_ms = end_kernel - start_kernel;
+    std::chrono::duration<double, std::milli> total_ms = end_total - start_total;
 
     std::cout << "TIME_KERNEL_MS: " << kernel_ms.count() << std::endl;
     std::cout << "TIME_TOTAL_MS: " << total_ms.count() << std::endl;

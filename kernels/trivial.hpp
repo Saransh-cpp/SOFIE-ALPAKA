@@ -7,12 +7,10 @@ namespace alpaka_kernels {
 
 struct TrivialKernel {
     template <typename TAcc, typename T, typename Dim, typename Idx>
-    ALPAKA_FN_ACC void operator()(TAcc const& acc, T const* input, T* output,
-                                  alpaka::Vec<Dim, Idx> output_strides,
+    ALPAKA_FN_ACC void operator()(TAcc const& acc, T const* input, T* output, alpaka::Vec<Dim, Idx> output_strides,
                                   alpaka::Vec<Dim, Idx> output_shape) const {
         using DimAcc = alpaka::Dim<TAcc>;
-        static_assert(DimAcc::value == Dim::value,
-                      "Accelerator and data dimensions must match!");
+        static_assert(DimAcc::value == Dim::value, "Accelerator and data dimensions must match!");
 
         constexpr std::size_t D = Dim::value;
         auto elements = alpaka::uniformElementsND(acc, output_shape);
