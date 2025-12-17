@@ -10,21 +10,46 @@ struct TransposeKernel {
     ALPAKA_FN_ACC void operator()(TAcc const& acc, T const* input, T* output, alpaka::Vec<Dim, Idx> input_strides,
                                   alpaka::Vec<Dim, Idx> output_strides, alpaka::Vec<Dim, Idx> output_shape,
                                   alpaka::Vec<Dim, Idx> perm) const {
-        using DimAcc = alpaka::Dim<TAcc>;
-        static_assert(DimAcc::value == Dim::value, "Accelerator and data dimensions must match!");
-
         constexpr std::size_t D = Dim::value;
-        auto elements = alpaka::uniformElementsND(acc, output_shape);
 
-        for (auto const& idx : elements) {
-            Idx input_idx = 0;
+        // Get global thread index (maps to output element)
+        auto const threadIdx = alpaka::getIdx<alpaka::Grid, alpaka::Threads>(acc);
+        auto const threadExtent = alpaka::getWorkDiv<alpaka::Grid, alpaka::Threads>(acc);
+
+        // Convert to linear index
+        Idx global_thread_idx = 0;
+        Idx stride = 1;
+        for (std::size_t d = 0; d < D; ++d) {
+            global_thread_idx += threadIdx[d] * stride;
+            stride *= threadExtent[d];
+        }
+
+        // Total number of output elements
+        Idx total_elements = 1;
+        for (std::size_t d = 0; d < D; ++d) {
+            total_elements *= output_shape[d];
+        }
+
+        // Process elements with stride equal to total threads (grid-stride loop)
+        for (Idx elem_idx = global_thread_idx; elem_idx < total_elements; elem_idx += threadExtent.prod()) {
+            // Convert linear index to multi-dimensional output index
+            Idx remaining = elem_idx;
+            alpaka::Vec<Dim, Idx> out_idx;
+            for (int d = D - 1; d >= 0; --d) {
+                out_idx[d] = remaining % output_shape[d];
+                remaining /= output_shape[d];
+            }
+
+            // Compute output linear index
             Idx output_idx = 0;
-
-            // Compute input and output indexes
             for (std::size_t d = 0; d < D; ++d) {
-                Idx const out_coord = idx[d];
-                output_idx += out_coord * output_strides[d];
-                input_idx += out_coord * input_strides[perm[d]];
+                output_idx += out_idx[d] * output_strides[d];
+            }
+
+            // Compute input linear index using permutation
+            Idx input_idx = 0;
+            for (std::size_t d = 0; d < D; ++d) {
+                input_idx += out_idx[d] * input_strides[perm[d]];
             }
 
             output[output_idx] = input[input_idx];

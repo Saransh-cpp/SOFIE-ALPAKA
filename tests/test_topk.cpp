@@ -101,14 +101,18 @@ int main(int argc, char* argv[]) {
 
     alpaka::Vec<Dim, Idx> threadsPerBlock;
     alpaka::Vec<Dim, Idx> blocksPerGrid;
-    Idx TARGET_BLOCK_SIZE = 16;
-    bool limitBlocks = false;
 
 #if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
     defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
 
-    TARGET_BLOCK_SIZE = 1;
-    limitBlocks = true;
+    Idx TARGET_BLOCK_SIZE = 1;
+    bool limitBlocks = true;
+
+#elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+
+    Idx TARGET_BLOCK_SIZE = 16;
+    bool limitBlocks = false;
+
 #endif
 
     for (std::size_t d = 0; d < Dim::value; ++d) {
@@ -138,14 +142,15 @@ int main(int argc, char* argv[]) {
     // 2) host -> accelerator
     auto start_total = now();
     {
-#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+        // For CPU, use memcpy
+        alpaka::memcpy(queue, aIn, hIn);
+#elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         // For GPU, use cudaMemcpy directly
         T* pAIn = alpaka::getPtrNative(aIn);
         T* pHIn = alpaka::getPtrNative(hIn);
         cudaMemcpy(pAIn, pHIn, numElems * sizeof(T), cudaMemcpyHostToDevice);
-#else
-        // For CPU, use memcpy
-        alpaka::memcpy(queue, aIn, hIn);
 #endif
     }
 
@@ -162,12 +167,13 @@ int main(int argc, char* argv[]) {
 
     // Final data transfer: accelerator -> host
     {
-#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+        alpaka::memcpy(queue, hOut, aOut);
+#elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         T* pAOut = alpaka::getPtrNative(aOut);
         T* pHOut = alpaka::getPtrNative(hOut);
         cudaMemcpy(pHOut, pAOut, numElems * sizeof(T), cudaMemcpyDeviceToHost);
-#else
-        alpaka::memcpy(queue, hOut, aOut);
 #endif
     }
     auto end_total = now();

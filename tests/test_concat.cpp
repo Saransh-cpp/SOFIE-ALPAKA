@@ -144,18 +144,21 @@ int main(int argc, char* argv[]) {
 
     auto output_strides = alpaka::Vec<Dim, Idx>(out_cols, 1);
 
-    // Work division: 2D mapping of threads to elements
-    std::size_t threadsX = 16, threadsY = 16;
-    std::size_t blocksX = (out_rows + threadsX - 1) / threadsX;
-    std::size_t blocksY = (out_cols + threadsY - 1) / threadsY;
-
 #if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
     defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
 
-    threadsX = 1;
-    threadsY = 1;
-    blocksX = 64;
-    blocksY = 1;
+    std::size_t threadsX = 1;
+    std::size_t threadsY = 1;
+    std::size_t blocksX = 64;
+    std::size_t blocksY = 1;
+
+#elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+
+    // Work division: 2D mapping of threads to elements
+    std::size_t threadsX = 4, threadsY = 4;
+    std::size_t blocksX = (out_rows + threadsX - 1) / threadsX;
+    std::size_t blocksY = (out_cols + threadsY - 1) / threadsY;
+
 #endif
 
     auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{alpaka::Vec<Dim, Idx>(blocksY, blocksX),
@@ -167,14 +170,16 @@ int main(int argc, char* argv[]) {
     for (std::size_t k = 0; k < NumInputs; ++k) {
         // 2) host -> accelerator
         {
-#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
-            // For GPU, use cudaMemcpy directly
-            T* pAIn = alpaka::getPtrNative(aIn_bufs.back());
-            T* pHIn = alpaka::getPtrNative(hIn_bufs.back());
-            cudaMemcpy(pAIn, pHIn, numElems * sizeof(T), cudaMemcpyHostToDevice);
-#else
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
             // For CPU, use memcpy
             alpaka::memcpy(queue, aIn_bufs[k], hIn_bufs[k]);
+
+#elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+            // For GPU, use cudaMemcpy directly
+            T* pAIn = alpaka::getPtrNative(aIn_bufs[k]);
+            T* pHIn = alpaka::getPtrNative(hIn_bufs[k]);
+            cudaMemcpy(pAIn, pHIn, numElems * sizeof(T), cudaMemcpyHostToDevice);
 #endif
         }
     }
@@ -192,12 +197,14 @@ int main(int argc, char* argv[]) {
 
     {
         // Final data transfer: accelerator -> host
-#if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+        alpaka::memcpy(queue, hOut, aOut);
+#elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
         T* pAOut = alpaka::getPtrNative(aOut);
         T* pHOut = alpaka::getPtrNative(hOut);
         cudaMemcpy(pHOut, pAOut, numElems * sizeof(T), cudaMemcpyDeviceToHost);
 #else
-        alpaka::memcpy(queue, hOut, aOut);
 #endif
     }
     auto end_total = now();
