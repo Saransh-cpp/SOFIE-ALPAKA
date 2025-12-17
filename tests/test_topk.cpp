@@ -64,8 +64,7 @@ int main(int argc, char* argv[]) {
         rows = std::atoi(argv[1]);
         cols = rows;
         std::cout << "Using input dimensions " << rows << "x" << cols << "\n";
-    }
-    else {
+    } else {
         std::cout << "Using random dimensions " << rows << "x" << cols << "\n";
     }
 
@@ -105,8 +104,7 @@ int main(int argc, char* argv[]) {
     Idx TARGET_BLOCK_SIZE = 16;
     bool limitBlocks = false;
 
-#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || \
-    defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
     defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
 
     TARGET_BLOCK_SIZE = 1;
@@ -117,22 +115,18 @@ int main(int argc, char* argv[]) {
         if (d == TopkAxis) {
             threadsPerBlock[d] = 1;
             blocksPerGrid[d] = 1;
-        }
-        else {
+        } else {
             threadsPerBlock[d] = TARGET_BLOCK_SIZE;
 
             if (limitBlocks) {
                 blocksPerGrid[d] = std::min(grid_elements[d], std::size_t(64));
-            }
-            else {
-                blocksPerGrid[d] = (grid_elements[d] + threadsPerBlock[d] - 1) /
-                                   threadsPerBlock[d];
+            } else {
+                blocksPerGrid[d] = (grid_elements[d] + threadsPerBlock[d] - 1) / threadsPerBlock[d];
             }
         }
     }
 
-    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{
-        blocksPerGrid, threadsPerBlock, grid_elements};
+    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{blocksPerGrid, threadsPerBlock, grid_elements};
 
     // Warmup run
     TopKKernel<K, MaxRegisters> kernel;
@@ -159,10 +153,8 @@ int main(int argc, char* argv[]) {
     // Launch kernel
     auto start_kernel = now();
 
-    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn),
-                      alpaka::getPtrNative(aOut), input_strides, output_strides,
-                      grid_elements, TopkAxis, extentIn[TopkAxis],
-                      padding_value);
+    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn), alpaka::getPtrNative(aOut), input_strides,
+                      output_strides, grid_elements, TopkAxis, extentIn[TopkAxis], padding_value);
 
     alpaka::wait(queue);
     auto end_kernel = now();
@@ -216,10 +208,8 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Correct!\n";
 
-    std::chrono::duration<double, std::milli> kernel_ms =
-        end_kernel - start_kernel;
-    std::chrono::duration<double, std::milli> total_ms =
-        end_total - start_total;
+    std::chrono::duration<double, std::milli> kernel_ms = end_kernel - start_kernel;
+    std::chrono::duration<double, std::milli> total_ms = end_total - start_total;
 
     std::cout << "TIME_KERNEL_MS: " << kernel_ms.count() << std::endl;
     std::cout << "TIME_TOTAL_MS: " << total_ms.count() << std::endl;

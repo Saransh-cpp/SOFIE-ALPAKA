@@ -107,7 +107,7 @@ def main():
                     concat_num = 3
                     total_bytes = 8 * concat_num * N * N
                 elif EXECUTABLE_PATH == "./bin/test_where.out":
-                    total_bytes = 13 * N * N 
+                    total_bytes = 13 * N * N
                 elif EXECUTABLE_PATH == "./bin/test_topk.out":
                     k = 4
                     total_bytes = 4 * N * N + 4 * N * k

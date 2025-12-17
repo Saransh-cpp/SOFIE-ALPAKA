@@ -152,8 +152,7 @@ int main(int argc, char* argv[]) {
     std::size_t blocksX = (out_rows + threadsX - 1) / threadsX;
     std::size_t blocksY = (out_cols + threadsY - 1) / threadsY;
 
-#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || \
-    defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
     defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
 
     threadsX = 1;
