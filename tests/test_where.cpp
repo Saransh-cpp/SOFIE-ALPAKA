@@ -132,6 +132,37 @@ int main(int argc, char* argv[]) {
     }
 
     // 2) host -> accelerator
+    {
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+        // For CPU, use memcpy
+        alpaka::memcpy(queue, aIn_X, hIn_X);
+        alpaka::memcpy(queue, aIn_Y, hIn_Y);
+        alpaka::memcpy(queue, aIn_Cond, hIn_Cond);
+#elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+        // For GPU, use cudaMemcpy directly
+        T* pAIn_X = alpaka::getPtrNative(aIn_X);
+        T* pAIn_Y = alpaka::getPtrNative(aIn_Y);
+        T* pAIn_Cond = alpaka::getPtrNative(aIn_Cond);
+        T* pHIn_X = alpaka::getPtrNative(hIn_X);
+        T* pHIn_Y = alpaka::getPtrNative(hIn_Y);
+        T* pHIn_Cond = alpaka::getPtrNative(hIn_Cond);
+        cudaMemcpy(pAIn_X, pHIn_X, numElems * sizeof(T), cudaMemcpyHostToDevice);
+        cudaMemcpy(pAIn_Y, pHIn_Y, numElems * sizeof(T), cudaMemcpyHostToDevice);
+        cudaMemcpy(pAIn_Cond, pHIn_Cond, numElems * sizeof(T), cudaMemcpyHostToDevice);
+#endif
+    }
+
+    // Warmup run
+    WhereKernel kernel;
+
+    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn_Cond), alpaka::getPtrNative(aIn_X),
+                      alpaka::getPtrNative(aIn_Y), alpaka::getPtrNative(aOut), strides, strides, strides, strides,
+                      extent);
+
+    alpaka::wait(queue);
+
+    // 2) host -> accelerator (again for timing)
     auto start_total = now();
     {
 #if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
@@ -155,8 +186,6 @@ int main(int argc, char* argv[]) {
     }
 
     // Launch kernel
-    WhereKernel kernel;
-
     auto start_kernel = now();
 
     alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn_Cond), alpaka::getPtrNative(aIn_X),

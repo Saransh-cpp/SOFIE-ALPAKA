@@ -122,6 +122,28 @@ int main(int argc, char* argv[]) {
     }
 
     // 2) host -> accelerator
+    {
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+        // For CPU, use memcpy
+        alpaka::memcpy(queue, aIn, hIn);
+#elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+        // For GPU, use cudaMemcpy directly
+        T* pAIn = alpaka::getPtrNative(aIn);
+        T* pHIn = alpaka::getPtrNative(hIn);
+        cudaMemcpy(pAIn, pHIn, numElems * sizeof(T), cudaMemcpyHostToDevice);
+#endif
+    }
+
+    // Warmup run
+    TransposeKernel kernel;
+
+    alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn), alpaka::getPtrNative(aOut), input_strides,
+                      output_strides, extentOut, perm);
+
+    alpaka::wait(queue);
+
+    // 2) host -> accelerator (again for timing)
     auto start_total = now();
     {
 #if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
@@ -137,8 +159,6 @@ int main(int argc, char* argv[]) {
     }
 
     // Launch kernel
-    TransposeKernel kernel;
-
     auto start_kernel = now();
 
     alpaka::exec<Acc>(queue, workDiv, kernel, alpaka::getPtrNative(aIn), alpaka::getPtrNative(aOut), input_strides,

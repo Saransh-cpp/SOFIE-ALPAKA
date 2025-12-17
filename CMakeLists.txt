@@ -18,6 +18,33 @@ set(CXX_CUDA_FLAGS -arch=${CUDA_ARCH} -Wno-deprecated-gpu-targets --extended-lam
 set(CMAKE_CUDA_COMPILER "/usr/local/cuda-12.5/bin/nvcc" CACHE PATH "Cuda compiler path")
 
 # --- Executables ---
+add_executable(test_trivial tests/test_trivial.cpp)
+set_source_files_properties(tests/test_trivial.cpp PROPERTIES LANGUAGE CUDA)
+enable_language(CUDA)
+
+set_target_properties(test_trivial PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+)
+
+target_compile_features(test_trivial PUBLIC cxx_std_20)
+
+target_compile_options(test_trivial PRIVATE
+    ${CXXFLAGS}
+    ${CXX_CUDA_FLAGS}
+    ${CXX_HOST_FLAGS}
+)
+
+target_compile_definitions(test_trivial PRIVATE
+    ALPAKA_ACC_GPU_CUDA_ENABLED
+)
+
+target_include_directories(test_trivial PRIVATE
+    ${ALPAKA_BASE}/include
+    ${CUDA_BASE}/include
+)
+
+target_link_directories(test_trivial PRIVATE ${CUDA_BASE}/lib64)
+
 add_executable(test_transpose tests/test_transpose.cpp)
 set_source_files_properties(tests/test_transpose.cpp PROPERTIES LANGUAGE CUDA)
 enable_language(CUDA)
