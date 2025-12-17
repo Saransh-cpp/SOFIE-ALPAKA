@@ -30,6 +30,8 @@ EXECUTABLE_PATHS_GPU = [
 ]
 
 BENCHMARK_SIZES = [
+    128,
+    256,
     512,
     1024,
     2048,
@@ -111,36 +113,40 @@ def run_pytorch_benchmark(op_name, N, num_repeats=1, warmup=0):
     # Setup Data
     if op_name == "trivial":
         x = torch.randn(N, N, device=device, dtype=torch.float32)
-        op = lambda: x.clone()
+        y = torch.empty_like(x)
+        op = lambda: y.copy_(x)
 
     elif op_name == "transpose":
         x = torch.randn(N, N, device=device, dtype=torch.float32)
-        op = lambda: x.t().contiguous()
+        y = torch.empty(N, N, device=device, dtype=torch.float32)
+        op = lambda: y.copy_(x.t())
 
     elif op_name == "concat":
         t1 = torch.randn(N, N, device=device, dtype=torch.float32)
         t2 = torch.randn(N, N, device=device, dtype=torch.float32)
         t3 = torch.randn(N, N, device=device, dtype=torch.float32)
-        op = lambda: torch.cat((t1, t2, t3), dim=1)
+        out_tensor = torch.empty(N, 3*N, device=device, dtype=torch.float32)
+        op = lambda: torch.cat((t1, t2, t3), dim=1, out=out_tensor)
 
     elif op_name == "where":
         cond = torch.randint(0, 2, (N, N), device=device, dtype=torch.bool)
         x = torch.randn(N, N, device=device, dtype=torch.float32)
         y = torch.randn(N, N, device=device, dtype=torch.float32)
-        op = lambda: torch.where(cond, x, y)
+        out_tensor = torch.empty_like(x)
+        op = lambda: torch.where(cond, x, y, out=out_tensor)
 
     elif op_name == "topk":
         k = 4
         x = torch.randn(N, N, device=device, dtype=torch.float32)
-        op = lambda: torch.topk(x, k)
+        values = torch.empty(N, k, device=device, dtype=torch.float32)
+        indices = torch.empty(N, k, device=device, dtype=torch.long)
+        op = lambda: torch.topk(x, k, out=(values, indices))
     else:
         return None
 
-    '''
     # Warmup
     for _ in range(warmup):
         op()
-    '''
 
     if device.type == 'cuda':
         torch.cuda.synchronize()
@@ -164,7 +170,7 @@ def run_pytorch_benchmark(op_name, N, num_repeats=1, warmup=0):
         for _ in range(num_repeats):
             op()
         end_time = time.perf_counter()
-        total_ms = (end_time - start_time) * 1000.0 # convert seconds to ms
+        total_ms = (end_time - start_time) * 1000.0
 
     return total_ms / num_repeats
 
@@ -204,8 +210,8 @@ def run_cpp_benchmark(executable_path, args):
 
 def main(gpu = False):
     if gpu:
-        print(f"\n{'Build System':^80}")
-        print("-" * 80)
+        print(f"\n{'Build System':^100}")
+        print("-" * 100)
 
         # Build Phase
         if not build_kernel_tests_gpu():
@@ -216,10 +222,10 @@ def main(gpu = False):
         if HAS_TORCH and torch.cuda.is_available():
             device_name = f"GPU ({torch.cuda.get_device_name(0)})"
 
-        print(f"\n{'Benchmarking System':^80}")
+        print(f"\n{'Benchmarking System':^100}")
         if HAS_TORCH:
-            print(f"{f'PyTorch Device: {device_name}':^80}")
-        print("-" * 80)
+            print(f"{f'PyTorch Device: {device_name}':^100}")
+        print("-" * 100)
 
         for EXECUTABLE_PATH in EXECUTABLE_PATHS_GPU:
             op_name = get_op_name(EXECUTABLE_PATH)
@@ -282,8 +288,8 @@ def main(gpu = False):
             print("-" * len(header))
     else:
         # Build System
-        print(f"\n{'Build System':^80}")
-        print("-" * 80)
+        print(f"\n{'Build System':^100}")
+        print("-" * 100)
         if not build_kernel_tests_cpu():
             sys.exit(1)
 
@@ -292,10 +298,10 @@ def main(gpu = False):
         if HAS_TORCH and torch.cuda.is_available():
             device_name = f"GPU ({torch.cuda.get_device_name(0)})"
 
-        print(f"\n{'Benchmarking System':^80}")
+        print(f"\n{'Benchmarking System':^100}")
         if HAS_TORCH:
-            print(f"{f'PyTorch Device: {device_name}':^80}")
-        print("-" * 80)
+            print(f"{f'PyTorch Device: {device_name}':^100}")
+        print("-" * 100)
 
         for EXECUTABLE_PATH in EXECUTABLE_PATHS_CPU:
             op_name = get_op_name(EXECUTABLE_PATH)
