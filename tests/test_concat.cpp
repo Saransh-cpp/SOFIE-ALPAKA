@@ -16,8 +16,8 @@ using Idx = std::size_t;
 
 #if defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
 using DevAcc = alpaka::DevCudaRt;
-using QueueAcc = alpaka::Queue<DevAcc, alpaka::NonBlocking>;
 using Acc = alpaka::AccGpuCudaRt<Dim, Idx>;
+using QueueAcc = alpaka::Queue<Acc, alpaka::NonBlocking>;
 
 #elif defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED)
 using DevAcc = alpaka::DevCpu;
@@ -31,8 +31,8 @@ using Acc = alpaka::AccCpuSerial<Dim, Idx>;
 
 #elif defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
 using DevAcc = alpaka::DevCpu;
-using QueueAcc = alpaka::Queue<DevAcc, alpaka::Blocking>;
 using Acc = alpaka::AccCpuThreads<Dim, Idx>;
+using QueueAcc = alpaka::Queue<Acc, alpaka::Blocking>;
 
 #else
 #error Please define a single one of ALPAKA_ACC_GPU_CUDA_ENABLED, ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED
@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) {
     // Setup the accelerator, host and queue
     auto devAcc = alpaka::getDevByIdx(PlatAcc{}, 0u);
     auto devHost = alpaka::getDevByIdx(PlatHost{}, 0u);
-    alpaka::Queue<Acc, alpaka::Blocking> queue{devAcc};
+    QueueAcc queue{devAcc};
 
     // Allocate buffers
     using BufAcc = decltype(alpaka::allocBuf<T, Idx>(devAcc, alpaka::Vec<Dim, Idx>{}));
@@ -142,22 +142,44 @@ int main(int argc, char* argv[]) {
 
     auto output_strides = alpaka::Vec<Dim, Idx>(out_cols, 1);
 
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+
+    std::size_t threadsX = 1;
+    std::size_t threadsY = 1;
+    std::size_t blocksX = 64;
+    std::size_t blocksY = 1;
+
+#elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+
     // Work division: 2D mapping of threads to elements
     std::size_t threadsX = 16, threadsY = 16;
     std::size_t blocksX = (out_rows + threadsX - 1) / threadsX;
     std::size_t blocksY = (out_cols + threadsY - 1) / threadsY;
 
-#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
-    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
-
-    threadsX = 1;
-    threadsY = 1;
-    blocksX = 64;
-    blocksY = 1;
 #endif
 
-    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{alpaka::Vec<Dim, Idx>(blocksX, blocksY),
-                                                          alpaka::Vec<Dim, Idx>(threadsX, threadsY), extentOut};
+    auto const workDiv = alpaka::WorkDivMembers<Dim, Idx>{alpaka::Vec<Dim, Idx>(blocksY, blocksX),
+                                                          alpaka::Vec<Dim, Idx>(threadsY, threadsX), extentOut};
+
+    // Host to accelerator data transfer
+    for (std::size_t k = 0; k < NumInputs; ++k) {
+        // 2) host -> accelerator
+        {
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+            // For CPU, use memcpy
+            alpaka::memcpy(queue, aIn_bufs[k], hIn_bufs[k]);
+
+#elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+            // For GPU, use cudaMemcpy directly
+            T* pAIn = alpaka::getPtrNative(aIn_bufs[k]);
+            T* pHIn = alpaka::getPtrNative(hIn_bufs[k]);
+            std::size_t numElems_k = in_rows[k] * cols;  // ACTUAL size of this buffer
+            cudaMemcpy(pAIn, pHIn, numElems_k * sizeof(T), cudaMemcpyHostToDevice);
+#endif
+        }
+    }
 
     // Warmup run
     ConcatKernel kernel;
@@ -167,14 +189,26 @@ int main(int argc, char* argv[]) {
 
     alpaka::wait(queue);
 
-    // Host to accelerator data transfer
+    // Host to accelerator data transfer (again for timing)
     auto start_total = now();
 
     for (std::size_t k = 0; k < NumInputs; ++k) {
-        alpaka::memcpy(queue, aIn_bufs[k], hIn_bufs[k]);
-    }
+        // 2) host -> accelerator
+        {
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+            // For CPU, use memcpy
+            alpaka::memcpy(queue, aIn_bufs[k], hIn_bufs[k]);
 
-    alpaka::wait(queue);
+#elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+            // For GPU, use cudaMemcpy directly
+            T* pAIn = alpaka::getPtrNative(aIn_bufs[k]);
+            T* pHIn = alpaka::getPtrNative(hIn_bufs[k]);
+            std::size_t numElems_k = in_rows[k] * cols;  // ACTUAL size of this buffer
+            cudaMemcpy(pAIn, pHIn, numElems_k * sizeof(T), cudaMemcpyHostToDevice);
+#endif
+        }
+    }
 
     // Launch kernel
     auto start_kernel = now();
@@ -185,9 +219,19 @@ int main(int argc, char* argv[]) {
     alpaka::wait(queue);
     auto end_kernel = now();
 
-    // Final data transfer: accelerator -> host
-    alpaka::memcpy(queue, hOut, aOut);
-    alpaka::wait(queue);
+    {
+        // Final data transfer: accelerator -> host
+#if defined(ALPAKA_ACC_CPU_B_SEQ_T_SEQ_ENABLED) || defined(ALPAKA_ACC_CPU_B_TBB_T_SEQ_ENABLED) || \
+    defined(ALPAKA_ACC_CPU_B_SEQ_T_THREADS_ENABLED)
+        alpaka::memcpy(queue, hOut, aOut);
+#elif defined(ALPAKA_ACC_GPU_CUDA_ENABLED)
+        T* pAOut = alpaka::getPtrNative(aOut);
+        T* pHOut = alpaka::getPtrNative(hOut);
+        const std::size_t numElems = total_rows * cols;
+        cudaMemcpy(pHOut, pAOut, numElems * sizeof(T), cudaMemcpyDeviceToHost);
+#else
+#endif
+    }
     auto end_total = now();
 
     // Print result
