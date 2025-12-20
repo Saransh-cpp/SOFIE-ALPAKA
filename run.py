@@ -281,6 +281,9 @@ def main(gpu=False):
             print("-" * len(header))
 
             for N in BENCHMARK_SIZES:
+                if HAS_TORCH and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
                 # 1. Run C++ Benchmark
                 cpp_res = run_cpp_benchmark(EXECUTABLE_PATH, [N])
                 if cpp_res:
