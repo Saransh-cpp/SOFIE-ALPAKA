@@ -111,6 +111,7 @@ def get_op_name(executable_path):
         return "topk"
     return "unknown"
 
+
 def run_pytorch_benchmark(op_name, N, num_repeats=10, warmup=10):
     """
     Runs the equivalent operation in PyTorch and measures execution time.
